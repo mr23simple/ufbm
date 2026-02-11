@@ -443,21 +443,21 @@ class Flower {
         this.heads = [];
         this.particles = [];
         this.orbs = new Map(); // requestId -> SpiritOrb
+        this.baseScale = width * 0.28;
         
-        this.init();
+        this.initHeads();
     }
 
-    init() {
-        this.baseScale = Math.min(width, height) * 0.35; 
-        
+    initHeads() {
+        this.heads = [];
         // Head 0: Middle (Center/Back)
-        this.heads.push(new FlowerHead(15, -45, -Math.PI/2 - 0.1, 1.0));
+        this.heads.push(new FlowerHead(this.baseScale * 0.05, -this.baseScale * 0.35, -Math.PI/2 - 0.1, 1.0));
         
-        // Head 1: Left
-        this.heads.push(new FlowerHead(-55, 10, -Math.PI * 0.85, 0.9));
+        // Head 1: Left - Brought in tighter
+        this.heads.push(new FlowerHead(-this.baseScale * 0.3, this.baseScale * 0.05, -Math.PI * 0.85, 0.9));
         
-        // Head 2: Right
-        this.heads.push(new FlowerHead(65, 10, -Math.PI * 0.15, 0.9));
+        // Head 2: Right - Brought in tighter
+        this.heads.push(new FlowerHead(this.baseScale * 0.35, this.baseScale * 0.05, -Math.PI * 0.15, 0.9));
     }
 
     triggerOrb(data) {
@@ -525,7 +525,7 @@ class Flower {
         
         const stemBaseX = width / 2;
         const stemBaseY = height;
-        const stemTipY = height * 0.65; // Adjusted to be slightly lower for better framing
+        const stemTipY = height * 0.7; // Lowered to 0.7 for better headroom in 3:4 ratio
 
         this.heads.forEach(h => h.updatePos(stemBaseX, stemTipY));
         this.heads.forEach(h => {
@@ -615,9 +615,31 @@ class Flower {
 // --- Functions ---
 
 function resize() {
-    width = canvas.width = container.clientWidth;
-    height = canvas.height = container.clientHeight;
-    flower = new Flower();
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    const targetRatio = 0.75; // 3:4 ratio
+
+    if (containerWidth / containerHeight > targetRatio) {
+        // Window is wider than 3:4
+        height = containerHeight;
+        width = height * targetRatio;
+    } else {
+        // Window is taller than 3:4
+        width = containerWidth;
+        height = width / targetRatio;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    
+    if (flower) {
+        flower.baseScale = width * 0.28; // Reduced scale slightly to ensure clearance
+        flower.initHeads();
+    } else {
+        flower = new Flower();
+    }
 }
 
 async function handleUpdate(data) {
