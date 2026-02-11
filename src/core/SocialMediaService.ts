@@ -1,4 +1,5 @@
 import { FacebookClient } from './FacebookClient.js';
+import { TwitterClient } from './TwitterClient.js';
 import { QueueManager } from './QueueManager.js';
 import { PostRequestSchema } from '../validation/schemas.js';
 import type { PostRequest } from '../validation/schemas.js';
@@ -7,28 +8,68 @@ import type { FISResponse } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { StreamManager } from './StreamManager.js';
 import { config } from '../config.js';
+import path from 'path';
+import fs from 'fs';
+import axios from 'axios';
 
-export interface FISConfig {
+export interface ServiceConfig {
+  platform: 'fb' | 'x';
   pageId: string;
   accessToken: string;
   concurrency?: number;
   publishRateLimit?: number;
 }
 
-export class FIS {
-  private client: FacebookClient;
+type GenericClient = FacebookClient | TwitterClient;
+
+export class SocialMediaService {
+  private client: GenericClient | null = null;
   private queue: QueueManager;
   private pageId: string;
+  private platform: 'fb' | 'x';
+  private config: ServiceConfig;
 
-  constructor(config: FISConfig) {
-    this.pageId = config.pageId;
-    this.client = new FacebookClient(config.pageId, config.accessToken);
-    this.queue = new QueueManager(config.concurrency || 3, config.publishRateLimit || 10);
-    logger.info('FIS Service Initialized', { 
-      pageId: config.pageId, 
-      concurrency: config.concurrency,
-      rateLimit: config.publishRateLimit
+  constructor(cfg: ServiceConfig) {
+    this.pageId = cfg.pageId;
+    this.platform = cfg.platform;
+    this.config = cfg;
+    this.queue = new QueueManager(cfg.concurrency || 3, cfg.publishRateLimit || 10);
+    
+    logger.info('Social Media Service Initialized', { 
+      platform: this.platform,
+      pageId: this.pageId, 
+      concurrency: cfg.concurrency,
+      rateLimit: cfg.publishRateLimit
     });
+  }
+
+  private getClient(): GenericClient {
+    if (this.client) return this.client;
+    
+    if (this.platform === 'fb') {
+      this.client = new FacebookClient(this.config.pageId, this.config.accessToken);
+    } else {
+      this.client = new TwitterClient(this.config.accessToken);
+    }
+    return this.client;
+  }
+
+  private async ensureLogoCached() {
+    const filePath = path.join(process.cwd(), 'public', 'cache', 'logos', `${this.platform}_${this.pageId}.jpg`);
+    if (fs.existsSync(filePath)) return;
+
+    try {
+      // Create cache dir if it doesn't exist
+      const cacheDir = path.dirname(filePath);
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+      const url = await this.getClient().getProfilePicUrl();
+      const response = await axios.get(url, { responseType: 'arraybuffer' });
+      fs.writeFileSync(filePath, response.data);
+      logger.debug('Cached profile picture', { platform: this.platform, pageId: this.pageId });
+    } catch (e: any) {
+      logger.warn('Failed to cache profile picture', { error: e.message, pageId: this.pageId });
+    }
   }
 
   async post(request: PostRequest): Promise<FISResponse> {
@@ -37,18 +78,22 @@ export class FIS {
     const isDryRun = config.DRY_RUN || validated.options?.dryRun;
     const requestId = `req_${Math.random().toString(36).substr(2, 9)}`;
 
-    StreamManager.emitQueueUpdate(this.pageId, 'queued', { 
+    StreamManager.emitQueueUpdate(this.platform, this.pageId, 'queued', { 
       priority: validated.priority,
       isDryRun,
       requestId
     });
+
+    if (!isDryRun) {
+      this.ensureLogoCached(); // Fire and forget
+    }
 
     return this.queue.add(async () => {
       const targets = [];
       if (validated.options?.publishToFeed !== false) targets.push('FEED');
       if (validated.options?.publishToStory) targets.push('STORY');
 
-      StreamManager.emitQueueUpdate(this.pageId, 'processing', { 
+      StreamManager.emitQueueUpdate(this.platform, this.pageId, 'processing', { 
         task: isDryRun ? `[DRY RUN] Simulating ${targets.join('+')}...` : `Starting ${targets.join('+')} Upload`,
         isDryRun,
         requestId
@@ -62,13 +107,13 @@ export class FIS {
       });
       
       if (isDryRun) {
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
         const mockResult = {
           success: true,
           postId: `DRY_RUN_${Math.random().toString(36).substring(7)}`,
           timestamp: new Date().toISOString()
         };
-        StreamManager.emitQueueUpdate(this.pageId, 'completed', { ...mockResult, isDryRun, requestId });
+        StreamManager.emitQueueUpdate(this.platform, this.pageId, 'completed', { ...mockResult, isDryRun, requestId });
         return mockResult;
       }
 
@@ -78,7 +123,7 @@ export class FIS {
         if (validated.media && validated.media.length > 0) {
           try {
             mediaIds = await Promise.all(
-              validated.media.map(m => this.client.uploadMedia({
+              validated.media.map(m => this.getClient().uploadMedia({
                 source: m.source,
                 type: m.type,
                 altText: m.altText ?? undefined
@@ -93,10 +138,11 @@ export class FIS {
         const results: FISResponse[] = [];
 
         if (validated.options?.publishToFeed !== false) {
-          const res = await this.client.createFeedPost(processedCaption, mediaIds);
+          const res = await this.getClient().createFeedPost(processedCaption, mediaIds);
           results.push(res);
           if (res.success) {
-            logger.info('Feed post published successfully', { 
+            logger.info('Post published successfully', { 
+              platform: this.platform,
               requestId, 
               postId: res.postId, 
               priority: validated.priority,
@@ -108,10 +154,11 @@ export class FIS {
         if (validated.options?.publishToStory && mediaIds.length > 0) {
           const firstMediaId = mediaIds[0];
           if (firstMediaId) {
-            const res = await this.client.createStory(firstMediaId);
+            const res = await this.getClient().createStory(firstMediaId);
             results.push(res);
             if (res.success) {
               logger.info('Story published successfully', { 
+                platform: this.platform,
                 requestId, 
                 mediaId: firstMediaId, 
                 priority: validated.priority,
@@ -127,7 +174,7 @@ export class FIS {
           timestamp: new Date().toISOString()
         };
 
-        StreamManager.emitQueueUpdate(this.pageId, finalResult.success ? 'completed' : 'failed', { 
+        StreamManager.emitQueueUpdate(this.platform, this.pageId, finalResult.success ? 'completed' : 'failed', { 
           postId: finalResult.postId,
           error: finalResult.error,
           requestId
@@ -137,7 +184,7 @@ export class FIS {
 
       } catch (error: any) {
         logger.error('Post execution error', { requestId, error: error.message });
-        StreamManager.emitQueueUpdate(this.pageId, 'failed', { error: error.message, requestId });
+        StreamManager.emitQueueUpdate(this.platform, this.pageId, 'failed', { error: error.message, requestId });
         
         return {
           success: false,
@@ -152,10 +199,14 @@ export class FIS {
     const isDryRun = config.DRY_RUN || dryRun;
     const requestId = `upd_${Math.random().toString(36).substr(2, 9)}`;
     logger.info('Queuing authoritative update', { requestId, postId, dryRun: isDryRun });
-    StreamManager.emitQueueUpdate(this.pageId, 'queued', { type: 'update', postId, isDryRun, requestId });
+    StreamManager.emitQueueUpdate(this.platform, this.pageId, 'queued', { type: 'update', postId, isDryRun, requestId });
     
+    if (!isDryRun) {
+      this.ensureLogoCached();
+    }
+
     return this.queue.add(async () => {
-      StreamManager.emitQueueUpdate(this.pageId, 'processing', { 
+      StreamManager.emitQueueUpdate(this.platform, this.pageId, 'processing', { 
         task: isDryRun ? '[DRY RUN] Updating...' : 'Updating Post',
         isDryRun,
         requestId
@@ -164,12 +215,12 @@ export class FIS {
       if (isDryRun) {
         await new Promise(resolve => setTimeout(resolve, 800));
         const mockResult = { success: true, postId, timestamp: new Date().toISOString() };
-        StreamManager.emitQueueUpdate(this.pageId, 'completed', { ...mockResult, isDryRun, requestId });
+        StreamManager.emitQueueUpdate(this.platform, this.pageId, 'completed', { ...mockResult, isDryRun, requestId });
         return mockResult;
       }
 
-      const result = await this.client.updatePost(postId, newCaption);
-      StreamManager.emitQueueUpdate(this.pageId, result.success ? 'completed' : 'failed', { postId, requestId });
+      const result = await this.getClient().updatePost(postId, newCaption);
+      StreamManager.emitQueueUpdate(this.platform, this.pageId, result.success ? 'completed' : 'failed', { postId, requestId });
       return result;
     }, priority, false);
   }

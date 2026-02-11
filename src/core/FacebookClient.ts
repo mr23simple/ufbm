@@ -85,6 +85,10 @@ export class FacebookClient {
     }
   }
 
+  async getProfilePicUrl(): Promise<string> {
+    return `https://graph.facebook.com/${this.pageId}/picture?type=large`;
+  }
+
   private handleError(error: any): FISResponse {
     const errorData = error.response?.data;
     const statusCode = error.response?.status;

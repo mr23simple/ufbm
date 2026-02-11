@@ -23,12 +23,20 @@ To target a specific social media account, include these headers in your request
 USMM uses an **Adaptive Token Strategy** to support diverse platform requirements while remaining a stateless proxy. The content of the `x-platform-token` header is interpreted based on the `platform` parameter:
 
 1.  **Raw String (Simple Token)**
-    *   Best for: Facebook, simple API keys.
+    *   Best for: Facebook (`fb`), simple API keys.
     *   **Value:** `EAAg...`
     
 2.  **JSON String (Multi-part Auth)**
-    *   Best for: Platforms requiring multiple keys (like X/Twitter).
-    *   **Value:** `{"apiKey": "...", "apiSecret": "...", ...}`
+    *   Best for: X/Twitter (`x`) using OAuth 1.0a.
+    *   **Structure:**
+        ```json
+        {
+          "appKey": "...",
+          "appSecret": "...",
+          "accessToken": "...",
+          "accessSecret": "..."
+        }
+        ```
 
 3.  **Base64 Encoded (Recommended)**
     *   Best for: Avoiding special character issues in HTTP headers when sending JSON.
@@ -42,7 +50,7 @@ USMM uses an **Adaptive Token Strategy** to support diverse platform requirement
 Create a new post on the specified platform(s). Supports JSON or `multipart/form-data`.
 
 **JSON Parameters:**
-*   `platform` (string, **required**): The target platform. Supported: `fb` (Facebook). Coming soon: `x` (Twitter).
+*   `platform` (string, **required**): The target platform. Supported: `fb` (Facebook), `x` (Twitter).
 *   `caption` (string, required): The text content of the post.
 *   `media` (array, optional): List of media objects.
     *   `source` (string/buffer): URL or binary data of the image/video.
@@ -50,11 +58,11 @@ Create a new post on the specified platform(s). Supports JSON or `multipart/form
 *   `priority` (number, optional): `10` (Critical), `5` (High), `0` (Normal). Defaults to `0`.
 *   `options` (object, optional):
     *   `publishToFeed` (boolean): Default `true`.
-    *   `publishToStory` (boolean): Default `false`.
+    *   `publishToStory` (boolean): Default `false` (FB only).
     *   `dryRun` (boolean): Default `false`.
     *   `retryConfig` (object): (Optional) `{ maxRetries: number, backoffMs: number }`.
 
-**Example Request:**
+**Example Request (Facebook):**
 ```json
 {
   "platform": "fb",
@@ -67,8 +75,17 @@ Create a new post on the specified platform(s). Supports JSON or `multipart/form
 }
 ```
 
+**Example Request (X/Twitter):**
+```json
+{
+  "platform": "x",
+  "caption": "Breaking news from USMM! #automation",
+  "priority": 10
+}
+```
+
 #### `POST /v1/post/:id/update`
-Edit an existing post's caption.
+Edit an existing post's caption. *Note: Only supported on Facebook currently.*
 
 **Parameters:**
 *   `id` (path): The platform-specific Post ID.
@@ -137,7 +154,7 @@ graph TD
 ---
 
 ## 🧪 Testing with Dry Run
-You can simulate any request without hitting the Facebook API by adding `"dryRun": true` to your payload. 
+You can simulate any request without hitting the underlying platform API by adding `"dryRun": true` to your payload. 
 *   The API returns a mock `postId` (e.g., `DRY_RUN_abc123`).
 *   The **Live Monitor** (`https://usmm.global-desk.top`) will label the data packet as **"DRY"** for visual verification.
 
@@ -152,19 +169,19 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Neural Flower 
 
 ---
 
----
-
 ## ⚡ Technical Specs
 *   **Security (Zero-Registration)**: 
-    *   **Tenant-Aware Rate Limiting**: Requests are limited by a combined key of `Sender IP + x-platform-id`. This prevents distributed spam against specific Social Media accounts.
-    *   **Stateless Architecture**: No user database required; credentials are encrypted in-flight and never stored.
-*   **Multi-Tenant Isolation**: Every unique ID receives a dedicated service instance and private priority queue.
+    *   **Tenant-Aware Rate Limiting**: Requests are limited by a combined key of `Sender IP + x-platform-id`. This prevents distributed spam against specific accounts.
+    *   **Stateless Architecture**: No user database required; credentials are interpreted in-flight and never stored.
+*   **Multi-Tenant Isolation**: Every unique project receives a dedicated service instance and private priority queue.
 *   **Concurrency**: Optimized for handling **100+ unique project queues** simultaneously.
 *   **Priority System**: 
     *   `10` (Critical): Immediate processing.
     *   `5` (High): Elevated queue position.
     *   `0` (Normal): Standard background processing.
-*   **API Version**: Facebook Graph API v24.0.
+*   **API Versions**: 
+    *   Facebook: Graph API v24.0
+    *   X / Twitter: API v2 (Tweets) & v1.1 (Media)
 *   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected.
 
 ---

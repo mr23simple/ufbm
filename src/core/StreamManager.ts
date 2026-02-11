@@ -21,14 +21,15 @@ export class StreamManager {
     }
   }
 
-  static emitQueueUpdate(pageId: string, status: 'queued' | 'processing' | 'completed' | 'failed', details: any) {
+  static emitQueueUpdate(platform: string, pageId: string, status: 'queued' | 'processing' | 'completed' | 'failed', details: any) {
     // Sanitized payload for public display
     const payload = {
       pageId,
       status,
+      platform,
       timestamp: Date.now(),
-      // Use local logo cache proxy
-      profilePic: `/logo/${pageId}`, 
+      // Use local logo cache proxy with platform
+      profilePic: `/logo/${platform}/${pageId}`, 
       ...details
     };
     

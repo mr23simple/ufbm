@@ -13,9 +13,10 @@ body {
   background-color: var(--bg-dark);
   font-family: 'Tilt Neon', sans-serif;
   color: #f8fafc;
-  overflow: hidden;
+  overflow: hidden; /* Prevent scrolling */
   height: 100vh;
   width: 100vw;
+  position: fixed; /* Extra protection against viewport shifts */
 }
 
 .cyber-container {
@@ -23,19 +24,14 @@ body {
   width: 100%;
   height: 100%;
   background: radial-gradient(circle at center, #0f172a 0%, #020617 70%);
+  overflow: hidden;
 }
 
-/* Nodes Layer */
-.nodes-layer {
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  z-index: 10;
-  pointer-events: none;
-}
+/* ... existing nodes-layer and dock styles ... */
 
 .dock {
   position: absolute;
-  width: 40px; /* Smaller nodes for density */
+  width: 40px; 
   height: 40px;
   background: #0f172a;
   border: 2px solid #1e293b;
@@ -46,9 +42,40 @@ body {
   box-shadow: 0 0 15px rgba(0,0,0,0.5);
   transition: opacity 0.5s ease-out;
   animation: fadeIn 0.5s ease-out;
-  transform: translate(-50%, -50%); /* Center anchor */
+  transform: translate(-50%, -50%); 
   z-index: 20;
+  will-change: left, top; /* Performance optimization */
 }
+
+/* Mobile Adjustments */
+@media (max-width: 600px) {
+  .dock {
+    width: 30px;
+    height: 30px;
+  }
+  .dock img {
+    width: 24px;
+    height: 24px;
+  }
+  .usmm-core {
+    width: 100px;
+    height: 86px;
+  }
+  .core-layer-1 { width: 96px; height: 82px; }
+  .core-layer-2 { width: 90px; height: 78px; }
+  .core-inner {
+    width: 86px;
+    height: 74px;
+    font-size: 1.2rem;
+  }
+  .hub-status {
+    font-size: 0.5rem;
+    width: 200px;
+    bottom: -30px;
+  }
+}
+
+/* ... existing hub-wrapper and core styles ... */
 
 .dock img {
   width: 32px;

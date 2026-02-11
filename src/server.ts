@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config.js';
-import { FISController } from './api/controller.js';
+import { SocialMediaController } from './api/controller.js';
 import { logger } from './utils/logger.js';
 import { StreamManager } from './core/StreamManager.js';
 import path from 'path';
@@ -71,34 +71,36 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-app.get('/logo/:pageId', async (req, res) => {
-  const { pageId } = req.params;
-  const fileName = `${pageId}.jpg`;
+app.get('/logo/:platform/:id', async (req, res) => {
+  const { platform, id } = req.params;
+  const fileName = `${platform}_${id}.jpg`;
   const filePath = path.join(LOGO_CACHE_DIR, fileName);
 
   if (fs.existsSync(filePath)) {
     return res.sendFile(filePath);
   }
 
-  try {
-    const response = await axios.get(`https://graph.facebook.com/${pageId}/picture?type=large`, {
-      responseType: 'arraybuffer'
-    });
-    fs.writeFileSync(filePath, response.data);
-    res.set('Content-Type', 'image/jpeg');
-    res.send(response.data);
-  } catch (error: any) {
-    logger.error('Failed to fetch/cache logo', { pageId, error: error.message });
-    res.status(404).send('Logo not found');
+  // Fallback for FB if not yet cached by Service
+  if (platform === 'fb') {
+    try {
+      const response = await axios.get(`https://graph.facebook.com/${id}/picture?type=large`, {
+        responseType: 'arraybuffer'
+      });
+      fs.writeFileSync(filePath, response.data);
+      res.set('Content-Type', 'image/jpeg');
+      return res.send(response.data);
+    } catch (e) {}
   }
+
+  res.status(404).send('Logo not found');
 });
 
 // Apply Rate Limiter to API routes
 app.use('/v1', apiLimiter);
 
-app.post('/v1/post', upload.array('media'), FISController.createPost);
-app.post('/v1/post/:id/update', FISController.updatePost);
-app.get('/v1/stats', FISController.getStats);
+app.post('/v1/post', upload.array('media'), SocialMediaController.createPost);
+app.post('/v1/post/:id/update', SocialMediaController.updatePost);
+app.get('/v1/stats', SocialMediaController.getStats);
 
 // Error Handler for Multer
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

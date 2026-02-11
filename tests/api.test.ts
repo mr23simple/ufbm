@@ -20,19 +20,37 @@ describe('USMM API Endpoints', () => {
     expect(res.body.error).toContain('Missing required parameter: platform');
   });
 
-  it('POST /v1/post should return 501 for platform "x"', async () => {
+  it('POST /v1/post should return 401 for platform "x" if credentials missing', async () => {
     const res = await request(app)
       .post('/v1/post')
       .send({
         platform: 'x',
         caption: 'Test post'
       });
-    expect(res.status).toBe(501);
-    expect(res.body.error).toContain('not yet implemented');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain('Missing Credentials');
+  });
+
+  it('POST /v1/post should accept valid X request with dryRun and mock credentials', async () => {
+    const mockCreds = JSON.stringify({
+      appKey: 'ak', appSecret: 'as', accessToken: 'at', accessSecret: 'asec'
+    });
+    const res = await request(app)
+      .post('/v1/post')
+      .set('x-platform-id', 'twitter_user_123')
+      .set('x-platform-token', Buffer.from(mockCreds).toString('base64'))
+      .send({
+        platform: 'x',
+        caption: 'Test dry run tweet',
+        options: { dryRun: true }
+      });
+    
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.postId).toContain('DRY_RUN_');
   });
 
   it('POST /v1/post should accept valid FB request with dryRun', async () => {
-    // Note: This requires x-platform-id/token or defaults in config
     const res = await request(app)
       .post('/v1/post')
       .set('x-platform-id', '12345')
@@ -43,9 +61,8 @@ describe('USMM API Endpoints', () => {
         options: { dryRun: true }
       });
     
-    // It might be 200 or 500 depending on FIS registry initialization,
-    // but since we passed id/token it should at least try to initialize FIS.
-    expect([200, 500]).toContain(res.status); 
+    expect(res.status).toBe(200); 
+    expect(res.body.success).toBe(true);
   });
 
   it('POST /v1/post/:id/update should fail if platform is missing', async () => {
@@ -58,20 +75,18 @@ describe('USMM API Endpoints', () => {
     expect(res.body.error).toContain('Missing required parameter: platform');
   });
 
-  it('POST /v1/post/:id/update should return 501 for platform "x"', async () => {
+  it('POST /v1/post/:id/update should return 401 for platform "x" if credentials missing', async () => {
     const res = await request(app)
       .post('/v1/post/123/update')
       .send({
         platform: 'x',
         caption: 'Updated caption'
       });
-    expect(res.status).toBe(501);
-    expect(res.body.error).toContain('not yet implemented');
+    expect(res.status).toBe(401);
   });
 
-  it('GET /logo/:pageId should return 404 for non-existent logo if graph fails', async () => {
-    // This might fail if network is blocked, but we're testing the logic
-    const res = await request(app).get('/logo/invalid_id_9999999');
+  it('GET /logo/:platform/:id should return 404 for non-existent logo if graph fails', async () => {
+    const res = await request(app).get('/logo/fb/invalid_id_9999999');
     expect(res.status).toBe(404);
   });
 

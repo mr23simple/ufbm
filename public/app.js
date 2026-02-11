@@ -37,15 +37,14 @@ function getColorForPage(pageId) {
 }
 
 async function handleUpdate(data) {
-  const { pageId, status, isDryRun, requestId, profilePic } = data;
+  const { platform, pageId, status, isDryRun, requestId, profilePic } = data;
   const pageColor = getColorForPage(pageId);
 
   if (!pageNodes.has(pageId)) {
     if (pendingPages.has(pageId)) {
       await waitForSetup(pageId);
     } else {
-      setupPageNode(pageId, profilePic, pageColor);
-      // No more frame waiting here, let the animate loop handle it
+      setupPageNode(pageId, profilePic, pageColor, platform);
     }
   }
 
@@ -53,10 +52,10 @@ async function handleUpdate(data) {
   if (!node) return;
   node.lastActivity = Date.now();
 
-  const containerHeight = container.getBoundingClientRect().height;
+  const height = container.clientHeight;
 
   if (status === 'queued') {
-    const p = createPacketElement(requestId, 'input', isDryRun, pageColor, node.startX, containerHeight);
+    const p = createPacketElement(requestId, 'input', isDryRun, pageColor, node.startX, height);
     const arrival = movePacketAlongPath(p, node.stemWire, 1200, false).then(() => {
       p.classList.add('parked-at-hub');
       p.style.opacity = '0'; 
@@ -81,7 +80,7 @@ async function handleUpdate(data) {
     const type = status === 'completed' ? 'success' : 'fail';
     node.el.style.setProperty('border-color', pageColor, 'important');
     node.el.style.setProperty('box-shadow', `0 0 25px ${pageColor}`, 'important');
-    setTimeout(() => { node.el.style.boxShadow = `0 0 15px rgba(0,0,0,0.5)`; }, 500);
+    setTimeout(() => { if (node.el) node.el.style.boxShadow = `0 0 15px rgba(0,0,0,0.5)`; }, 500);
     const packetData = activePackets.get(requestId);
     if (packetData) {
       await packetData.arrivalPromise;
@@ -146,47 +145,38 @@ function waitForSetup(pageId) {
   });
 }
 
-function setupPageNode(pageId, profilePic, color) {
+function setupPageNode(pageId, profilePic, color, platform) {
   pendingPages.add(pageId);
-  const containerRect = container.getBoundingClientRect();
-  const centerX = containerRect.width / 2;
-  const centerY = containerRect.height / 2;
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const centerX = width / 2;
+  const centerY = height / 2;
   
   let angle;
   do { angle = Math.random() * Math.PI * 2; } while (angle > Math.PI * 0.3 && angle < Math.PI * 0.7);
   const radius = Math.min(centerX, centerY) * (0.5 + Math.random() * 0.3);
   const startX = centerX + Math.cos(angle) * radius;
   const startY = centerY + Math.sin(angle) * radius;
-  const nodeStartX = centerX + (Math.random() - 0.5) * 60;
+  const nodeStartX = centerX + (Math.random() - 0.5) * (width < 600 ? 40 : 60);
 
-  // Create Elements
-  const div = document.createElement('div');
-  div.className = 'dock';
-  div.style.setProperty('border-color', color, 'important');
-  div.innerHTML = `<div class="dock-glow" style="border-color: ${color} !important;"></div><img src="${profilePic}" onerror="this.src='https://placehold.co/40?text=USMM'">`;
-  
-  // PRE-CALCULATE AND SET POSITIONS IMMEDIATELY
+  const div = createDock(nodesLayer, profilePic, color, platform);
   div.style.left = `${startX}px`;
   div.style.top = `${startY}px`;
-  div.style.opacity = '0'; // Still fade in for smoothness, but position is fixed
+  div.style.opacity = '0'; 
 
   const stemWire = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   stemWire.setAttribute('class', 'wire-path');
   stemWire.style.setProperty('stroke', color, 'important');
   stemWire.style.setProperty('opacity', '0'); 
-  // Set initial path D
-  stemWire.setAttribute('d', `M ${nodeStartX} ${containerRect.height} L ${nodeStartX} ${centerY} L ${centerX} ${centerY}`);
+  stemWire.setAttribute('d', `M ${nodeStartX} ${height} L ${nodeStartX} ${centerY} L ${centerX} ${centerY}`);
 
   const wire = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   wire.setAttribute('class', 'wire-path');
   wire.style.setProperty('stroke', color, 'important');
   wire.style.setProperty('opacity', '0'); 
-  // Set initial path D
   const midX = (startX + centerX) / 2;
   wire.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${centerY}, ${centerX} ${centerY}`);
 
-  // Append to DOM
-  nodesLayer.appendChild(div);
   svgLayer.appendChild(stemWire);
   svgLayer.appendChild(wire);
 
@@ -199,23 +189,35 @@ function setupPageNode(pageId, profilePic, color) {
   pendingPages.delete(pageId);
 }
 
+function createDock(containerEl, img, color, platform) {
+  const div = document.createElement('div');
+  div.className = 'dock';
+  div.style.setProperty('border-color', color, 'important');
+  div.style.setProperty('box-shadow', `0 0 10px ${color}`, 'important');
+  const label = platform ? platform.toUpperCase() : 'USMM';
+  div.innerHTML = `<div class="dock-glow" style="border-color: ${color} !important; box-shadow: 0 0 10px ${color} !important"></div><img src="${img}" onerror="this.src='https://placehold.co/40?text=${label}'">`;
+  containerEl.appendChild(div);
+  return div;
+}
+
 function getEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
 function animate() {
-  const containerRect = container.getBoundingClientRect();
-  const centerX = containerRect.width / 2;
-  const centerY = containerRect.height / 2;
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const centerX = width / 2;
+  const centerY = height / 2;
   const now = Date.now();
 
   for (const [id, node] of pageNodes.entries()) {
-    // 1. Physics
     for (const [otherId, otherNode] of pageNodes.entries()) {
       if (id === otherId) continue;
       const dx = node.x - otherNode.x;
       const dy = node.y - otherNode.y;
       const distSq = dx*dx + dy*dy;
-      if (distSq < 4900 && distSq > 0) {
-        const force = 15 / distSq;
+      const minDist = width < 600 ? 1600 : 4900; 
+      if (distSq < minDist && distSq > 0) {
+        const force = (width < 600 ? 8 : 15) / distSq;
         node.vx += dx * force;
         node.vy += dy * force;
       }
@@ -223,14 +225,16 @@ function animate() {
     const dcx = node.x - centerX;
     const dcy = node.y - centerY;
     const distCenter = Math.sqrt(dcx*dcx + dcy*dcy);
-    if (distCenter < 160) {
-      const force = (160 - distCenter) * 0.005;
+    const hubRepulsionDist = width < 600 ? 100 : 160;
+    if (distCenter < hubRepulsionDist) {
+      const force = (hubRepulsionDist - distCenter) * 0.005;
       node.vx += (dcx / distCenter) * force;
       node.vy += (dcy / distCenter) * force;
     }
     if (node.y > centerY) {
       const distX = Math.abs(node.x - centerX);
-      if (distX < 80) {
+      const wallWidth = width < 600 ? 50 : 80;
+      if (distX < wallWidth) {
         node.vx += (node.x > centerX ? 1 : -1) * 0.15;
         node.vy -= 0.03; 
       }
@@ -242,14 +246,17 @@ function animate() {
     node.x += node.vx; node.y += node.vy;
     node.vx *= 0.94; node.vy *= 0.94;
 
-    // 2. Sync DOM and Wires
+    if (node.x < 30) node.x = 30;
+    if (node.x > width - 30) node.x = width - 30;
+    if (node.y < 30) node.y = 30;
+    if (node.y > height - 30) node.y = height - 30;
+
     node.el.style.left = `${node.x}px`;
     node.el.style.top = `${node.y}px`;
     const midX = (node.x + centerX) / 2;
     node.wirePath.setAttribute('d', `M ${node.x} ${node.y} C ${midX} ${node.y}, ${midX} ${centerY}, ${centerX} ${centerY}`);
-    node.stemWire.setAttribute('d', `M ${node.startX} ${containerRect.height} L ${node.startX} ${centerY} L ${centerX} ${centerY}`);
+    node.stemWire.setAttribute('d', `M ${node.startX} ${height} L ${node.startX} ${centerY} L ${centerX} ${centerY}`);
 
-    // 3. Reveal if new (Ensures sync is perfect before visibility)
     if (node.isNew) {
       node.el.style.opacity = '1';
       node.wirePath.style.setProperty('opacity', '0.3', 'important');
@@ -258,7 +265,6 @@ function animate() {
     }
   }
 
-  // Packets
   for (const p of movingPackets) {
     const elapsed = now - p.startTime;
     const progress = Math.min(elapsed / p.duration, 1);
@@ -278,11 +284,10 @@ function animate() {
     }
   }
 
-  // Cleanup
   for (const [id, node] of pageNodes.entries()) {
     if (now - node.lastActivity > INACTIVITY_MS && !processingPages.has(id)) {
       node.el.style.opacity = '0'; node.wirePath.style.opacity = '0'; node.stemWire.style.opacity = '0';
-      setTimeout(() => { node.el.remove(); node.wirePath.remove(); node.stemWire.remove(); }, 500);
+      setTimeout(() => { if (node.el) node.el.remove(); node.wirePath.remove(); node.stemWire.remove(); }, 500);
       pageNodes.delete(id);
     }
   }
