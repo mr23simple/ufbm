@@ -10,7 +10,7 @@
 
 body {
   margin: 0;
-  background-color: #000;
+  background-color: #050202;
   font-family: 'Tilt Neon', sans-serif;
   color: #f8fafc;
   overflow: hidden; /* Prevent scrolling */
@@ -23,7 +23,7 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: #050202;
   overflow: hidden;
 }
 
@@ -106,18 +106,6 @@ body {
 }
 
 @keyframes spin { 100% { transform: rotate(360deg); } }
-
-.hub-status {
-  position: absolute;
-  bottom: -40px;
-  width: 300px;
-  text-align: center;
-  font-size: 0.65rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 3px;
-  transition: color 0.3s ease;
-}
 
 /* Wires */
 .pipeline-svg {
