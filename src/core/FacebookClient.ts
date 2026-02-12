@@ -57,11 +57,18 @@ export class FacebookClient {
     }
   }
 
-  async createStory(mediaId: string): Promise<FISResponse> {
+  async createStory(mediaId: string, type: 'image' | 'video' = 'image'): Promise<FISResponse> {
     try {
+      const endpoint = type === 'video' ? `/${this.pageId}/video_stories` : `/${this.pageId}/photo_stories`;
+      const paramName = type === 'video' ? 'video_id' : 'photo_id';
+      
+      const response = await this.api.post(endpoint, null, {
+        params: { [paramName]: mediaId }
+      });
+
       return {
         success: true,
-        postId: `STORY_${mediaId}`,
+        postId: response.data.id,
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {

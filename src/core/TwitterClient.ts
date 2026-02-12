@@ -87,7 +87,7 @@ export class TwitterClient {
     }
   }
 
-  async createStory(mediaId: string): Promise<FISResponse> {
+  async createStory(mediaId: string, type: 'image' | 'video' = 'image'): Promise<FISResponse> {
     // Twitter doesn't have a public "Story" API like FB. 
     // We could potentially implement "Fleets" if they ever return, or just another tweet.
     // For now, we return a failure or a fallback.

@@ -153,8 +153,9 @@ export class SocialMediaService {
 
         if (validated.options?.publishToStory && mediaIds.length > 0) {
           const firstMediaId = mediaIds[0];
+          const firstMediaType = validated.media?.[0]?.type || 'image';
           if (firstMediaId) {
-            const res = await this.getClient().createStory(firstMediaId);
+            const res = await this.getClient().createStory(firstMediaId, firstMediaType);
             results.push(res);
             if (res.success) {
               logger.info('Story published successfully', { 
