@@ -28,8 +28,12 @@ export class QueueManager {
   async add<T>(
     task: () => Promise<T>,
     priority: WorkloadPriority = WorkloadPriority.NORMAL,
-    isPublishingTask: boolean = false
+    isPublishingTask: boolean = false,
+    isDryRun: boolean = false
   ): Promise<T> {
+    if (isDryRun) {
+      return task();
+    }
     // Publishing tasks are instance-specific (rate limits), 
     // but general tasks (uploads, processing) hit the global concurrency limit
     const targetQueue = isPublishingTask ? this.publishQueue : QueueManager.globalGeneralQueue;

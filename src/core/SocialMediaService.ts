@@ -74,7 +74,7 @@ export class SocialMediaService {
 
   async post(request: PostRequest): Promise<FISResponse> {
     const validated = PostRequestSchema.parse(request);
-    const processedCaption = this.ensureRobustCaption(validated.caption);
+    const processedCaption = validated.caption ? this.ensureRobustCaption(validated.caption) : '';
     const isDryRun = config.DRY_RUN || validated.options?.dryRun;
     const requestId = `req_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -192,7 +192,7 @@ export class SocialMediaService {
           timestamp: new Date().toISOString()
         };
       }
-    }, validated.priority, true);
+    }, validated.priority, true, isDryRun);
   }
 
   async updatePost(postId: string, newCaption: string, priority: WorkloadPriority = WorkloadPriority.HIGH, dryRun: boolean = false): Promise<FISResponse> {
@@ -222,10 +222,10 @@ export class SocialMediaService {
       const result = await this.getClient().updatePost(postId, newCaption);
       StreamManager.emitQueueUpdate(this.platform, this.pageId, result.success ? 'completed' : 'failed', { postId, requestId });
       return result;
-    }, priority, false);
+    }, priority, false, isDryRun);
   }
 
-  private ensureRobustCaption(caption: string): string {
+  private ensureRobustCaption(caption?: string): string {
     if (!caption || caption.length < 50) {
       return caption || '⚠️ Standard Advisory: Please check the official portal for more details.';
     }

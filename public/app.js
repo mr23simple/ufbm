@@ -24,6 +24,18 @@ const CONFIG = {
 
 // --- Utils ---
 
+function lerpColor(a, b, amount) {
+    const ah = parseInt(a.replace(/#/g, ''), 16),
+        ar = ah >> 16, ag = ah >> 8 & 0xff, ab = ah & 0xff,
+        bh = parseInt(b.replace(/#/g, ''), 16),
+        br = bh >> 16, bg = bh >> 8 & 0xff, bb = bh & 0xff,
+        rr = ar + amount * (br - ar),
+        rg = ag + amount * (bg - ag),
+        rb = ab + amount * (bb - ab);
+
+    return '#' + ((1 << 24) + (Math.round(rr) << 16) + (Math.round(rg) << 8) + Math.round(rb)).toString(16).slice(1);
+}
+
 function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
 function easeInOutQuad(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
@@ -263,23 +275,24 @@ class Pistil {
 }
 
 class SpiritOrb {
-    constructor(flower, targetHead, targetPistil, requestId, color, profilePic) {
+    constructor(flower, targetHead, targetPistil, requestId, color, profilePic, isDryRun = false) {
         this.flower = flower;
         this.targetHead = targetHead;
         this.targetPistil = targetPistil;
         this.requestId = requestId;
         this.color = color || CONFIG.orbColor;
         this.profilePic = profilePic;
+        this.isDryRun = isDryRun;
         
-        this.state = 'WAITING'; 
-        this.x = 0;
-        this.y = 0;
-        this.radius = 5; // CHANGE: Smaller initial size (was 3)
+        this.state = isDryRun ? 'FLOAT' : 'WAITING'; 
+        this.x = isDryRun ? (Math.random() * width) : 0;
+        this.y = isDryRun ? height + 20 : 0;
+        this.radius = isDryRun ? 15 : 5; // Dry run orbs are larger and blurrier
         this.timer = 0;
         this.finished = false; 
         
         this.pulseOffset = Math.random() * 10000;
-        this.pulseSpeed = 0.003 + Math.random() * 0.008;
+        this.pulseSpeed = isDryRun ? 0.001 : (0.003 + Math.random() * 0.008);
 
         this.waitDuration = 200; 
         this.stemDuration = 1000;
@@ -294,6 +307,14 @@ class SpiritOrb {
     }
 
     update(stemBaseX, stemBaseY, stemTipY, baseScale, timeSinceStart) {
+        if (this.isDryRun) {
+            this.timer += 16;
+            this.y -= 0.5; // Slower float for dry run
+            this.x += Math.sin(this.timer * 0.001 + this.floatPhase) * 0.2;
+            if (this.y < -100) this.finished = true;
+            return;
+        }
+
         if (this.state === 'WAITING') {
             this.timer += 16;
             this.x = stemBaseX;
@@ -383,6 +404,11 @@ class SpiritOrb {
     draw(ctx) {
         ctx.save();
         
+        if (this.isDryRun) {
+            ctx.filter = 'blur(8px)';
+            ctx.globalAlpha = 0.3;
+        }
+
         const time = Date.now();
         const pulse = 1 + Math.sin(time * this.pulseSpeed + this.pulseOffset) * 0.2;
         
@@ -486,8 +512,13 @@ class Flower {
     }
 
     triggerOrb(data) {
-        const { requestId, color, profilePic } = data;
+        const { requestId, color, profilePic, isDryRun } = data;
         
+        if (isDryRun) {
+            this.orbs.set(requestId, new SpiritOrb(this, null, null, requestId, color, profilePic, true));
+            return;
+        }
+
         // Collect all available (not gone and not currently targeted) pistils from all heads
         let allAvailable = [];
         this.heads.forEach(h => {
@@ -514,11 +545,21 @@ class Flower {
         if (!geom) return;
 
         const segments = 50; 
+        const baseColor = pistil.color || CONFIG.stamenColor;
+        const endColor = pistil.color ? '#ffffff' : '#ffaaaa';
+
         for (let i = 0; i <= segments; i++) {
             const t = i / segments;
             const pos = getBezierPoint(t, geom.p0, geom.p1, geom.p2, geom.p3);
-            const color = pistil.color || (Math.random() > 0.5 ? 'rgba(255, 50, 50, 0.8)' : 'rgba(255, 200, 200, 0.8)');
-            this.particles.push(new Particle(pos.x, pos.y, color));
+            
+            let pColor;
+            if (t < 0.4) {
+                pColor = lerpColor('#600000', baseColor, t / 0.4);
+            } else {
+                pColor = lerpColor(baseColor, endColor, (t - 0.4) / 0.6);
+            }
+            
+            this.particles.push(new Particle(pos.x, pos.y, pColor));
         }
     }
 
@@ -553,6 +594,15 @@ class Flower {
         const stemTipY = height * 0.6; // Maintained 60% position
 
         this.heads.forEach(h => h.updatePos(stemBaseX, stemTipY));
+
+        // Draw Dry Run Orbs in the far background
+        for (const orb of this.orbs.values()) {
+            if (!orb.finished && orb.isDryRun) {
+                orb.update(stemBaseX, stemBaseY, stemTipY, this.baseScale, timeSinceStart);
+                orb.draw(ctx);
+            }
+        }
+
         this.heads.forEach(h => {
             h.pistils.forEach(p => {
                 if (p.isGone && timeSinceStart > p.respawnTime) {
@@ -574,7 +624,7 @@ class Flower {
         this.drawPedicels(stemBaseX, stemTipY, timeSinceStart);
         
         for (const orb of this.orbs.values()) {
-             if (!orb.finished && (orb.state === 'WAITING' || orb.state === 'STEM' || orb.state === 'PEDICEL')) {
+             if (!orb.finished && !orb.isDryRun && (orb.state === 'WAITING' || orb.state === 'STEM' || orb.state === 'PEDICEL')) {
                  orb.update(stemBaseX, stemBaseY, stemTipY, this.baseScale, timeSinceStart);
                  orb.draw(ctx);
              }
@@ -661,11 +711,11 @@ function resize() {
 }
 
 async function handleUpdate(data) {
-    const { pageId, status, requestId, profilePic } = data;
+    const { pageId, status, requestId, profilePic, isDryRun } = data;
     const neonRed = '#ff2828'; 
 
     if (status === 'queued') {
-        flower.triggerOrb({ requestId, color: neonRed, profilePic, pageId });
+        flower.triggerOrb({ requestId, color: neonRed, profilePic, pageId, isDryRun });
     } else if (status === 'processing') {
         processingPages.add(pageId);
         coreHub.classList.add('active-core');

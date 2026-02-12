@@ -100,9 +100,9 @@ export class SocialMediaController {
       if (files && files.length > 0) {
         if (!payload.media) payload.media = [];
         for (const file of files) {
-          const optimizedBuffer = await SocialMediaController.optimizeMedia(file);
+          const buffer = isDryRun ? file.buffer : await SocialMediaController.optimizeMedia(file);
           payload.media.push({
-            source: optimizedBuffer,
+            source: buffer,
             type: file.mimetype.startsWith('video') ? 'video' : 'image',
           });
         }
@@ -116,8 +116,14 @@ export class SocialMediaController {
       const result = await service.post(payload);
       res.status(result.success ? 200 : 500).json(result);
     } catch (error: any) {
-      logger.error('API Error', { error: error.message });
-      res.status(500).json({ success: false, error: error.message });
+      if (error.errors) {
+        // Zod validation error
+        logger.error('Validation Error', { details: error.errors });
+        res.status(400).json({ success: false, error: 'Validation Error', details: error.errors });
+      } else {
+        logger.error('API Error', { error: error.message });
+        res.status(500).json({ success: false, error: error.message });
+      }
     }
   }
 
@@ -152,8 +158,13 @@ export class SocialMediaController {
       
       res.status(result.success ? 200 : 500).json(result);
     } catch (error: any) {
-      logger.error('Update Post Error', { error: error.message });
-      res.status(500).json({ success: false, error: error.message });
+      if (error.errors) {
+        logger.error('Validation Error', { details: error.errors });
+        res.status(400).json({ success: false, error: 'Validation Error', details: error.errors });
+      } else {
+        logger.error('Update Post Error', { error: error.message });
+        res.status(500).json({ success: false, error: error.message });
+      }
     }
   }
 

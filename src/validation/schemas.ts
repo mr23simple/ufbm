@@ -9,7 +9,7 @@ export const MediaSchema = z.object({
 
 export const PostRequestSchema = z.object({
   platform: z.enum(['fb', 'x']),
-  caption: z.string().min(1),
+  caption: z.string().optional(),
   media: z.array(MediaSchema).optional(),
   priority: z.nativeEnum(WorkloadPriority).default(WorkloadPriority.NORMAL),
   options: z.object({
@@ -21,6 +21,14 @@ export const PostRequestSchema = z.object({
       backoffMs: z.number().default(1000),
     }).optional(),
   }).optional(),
+}).refine(data => {
+  if (data.options?.publishToFeed !== false && !data.caption) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Caption is required for feed posts",
+  path: ["caption"]
 });
 
 export type PostRequest = z.infer<typeof PostRequestSchema>;

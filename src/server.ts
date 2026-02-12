@@ -55,8 +55,26 @@ const apiLimiter = rateLimit({
     const platformId = req.headers['x-platform-id'] || req.headers['x-fb-page-id'] || 'anonymous';
     return `${req.ip}_${platformId}`;
   },
-  validate: { keyGeneratorIpFallback: false }, // Resolve ERR_ERL_KEY_GEN_IPV6
-  message: { success: false, error: 'Too many requests for this platform/IP, please try again later.' }
+  validate: { default: false }, // Resolve validation errors
+  message: { success: false, error: 'Too many requests for this platform/IP, please try again later.' },
+  skip: (req) => {
+    const isDryRun = req.body?.options?.dryRun === true || req.body?.options?.dryRun === 'true' || req.body?.dryRun === true || req.body?.dryRun === 'true';
+    return isDryRun;
+  }
+});
+
+const dryRunLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 200, 
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `dryrun_${req.ip}`,
+  validate: { default: false },
+  message: { success: false, error: 'Dry run quota exceeded, please wait a minute.' },
+  skip: (req) => {
+    const isDryRun = req.body?.options?.dryRun === true || req.body?.options?.dryRun === 'true' || req.body?.dryRun === true || req.body?.dryRun === 'true';
+    return !isDryRun;
+  }
 });
 
 // Middleware
@@ -97,6 +115,7 @@ app.get('/logo/:platform/:id', async (req, res) => {
 
 // Apply Rate Limiter to API routes
 app.use('/v1', apiLimiter);
+app.use('/v1', dryRunLimiter);
 
 app.post('/v1/post', upload.array('media'), SocialMediaController.createPost);
 app.post('/v1/post/:id/update', SocialMediaController.updatePost);

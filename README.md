@@ -51,7 +51,7 @@ Create a new post on the specified platform(s). Supports JSON or `multipart/form
 
 **JSON Parameters:**
 *   `platform` (string, **required**): The target platform. Supported: `fb` (Facebook), `x` (Twitter).
-*   `caption` (string, required): The text content of the post.
+*   `caption` (string): The text content of the post. **Mandatory** for feed posts, but optional if `publishToFeed` is set to `false` (e.g., for Story-only posts).
 *   `media` (array, optional): List of media objects.
     *   `source` (string/buffer): URL or binary data of the image/video.
     *   `type` (string): Either `image` or `video`.
