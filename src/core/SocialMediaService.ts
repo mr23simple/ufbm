@@ -3,6 +3,7 @@ import { TwitterClient } from './TwitterClient.js';
 import { QueueManager } from './QueueManager.js';
 import { PostRequestSchema } from '../validation/schemas.js';
 import type { PostRequest } from '../validation/schemas.js';
+import { z } from 'zod';
 import { WorkloadPriority } from '../types/index.js';
 import type { FISResponse } from '../types/index.js';
 import { logger } from '../utils/logger.js';
@@ -73,9 +74,9 @@ export class SocialMediaService {
   }
 
   async post(request: PostRequest): Promise<FISResponse> {
-    const validated = PostRequestSchema.parse(request);
-    const processedCaption = validated.caption ? this.ensureRobustCaption(validated.caption) : '';
+    const validated = request;
     const isDryRun = config.DRY_RUN || validated.options?.dryRun;
+    const processedCaption = validated.caption ? this.ensureRobustCaption(validated.caption) : '';
     const requestId = `req_${Math.random().toString(36).substr(2, 9)}`;
 
     StreamManager.emitQueueUpdate(this.platform, this.pageId, 'queued', { 
@@ -107,11 +108,26 @@ export class SocialMediaService {
       });
       
       if (isDryRun) {
+        // Refined Dry Run: Validate credentials before simulating
+        const validation = await this.getClient().validateToken(validated.options?.validateToken);
+        if (!validation.valid) {
+          const error = { 
+            code: 'AUTH_VALIDATION_FAILED', 
+            message: `Dry Run Auth Check Failed: ${validation.error || 'Invalid credentials'}` 
+          };
+          StreamManager.emitQueueUpdate(this.platform, this.pageId, 'failed', { ...error, isDryRun, requestId });
+          return { success: false, error, timestamp: new Date().toISOString() };
+        }
+
         await new Promise(resolve => setTimeout(resolve, 1500));
         const mockResult = {
           success: true,
           postId: `DRY_RUN_${Math.random().toString(36).substring(7)}`,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          dryRunMetadata: {
+            accountName: (validation as any).name || 'Mock Account',
+            validatedAt: new Date().toISOString()
+          }
         };
         StreamManager.emitQueueUpdate(this.platform, this.pageId, 'completed', { ...mockResult, isDryRun, requestId });
         return mockResult;
@@ -123,11 +139,14 @@ export class SocialMediaService {
         if (validated.media && validated.media.length > 0) {
           try {
             mediaIds = await Promise.all(
-              validated.media.map(m => this.getClient().uploadMedia({
-                source: m.source,
-                type: m.type,
-                altText: m.altText ?? undefined
-              }))
+              validated.media.map((m, idx) => {
+                const fallbackAlt = `${this.pageId}_${Math.floor(Date.now() / 1000)}_${idx}`;
+                return this.getClient().uploadMedia({
+                  source: m.source,
+                  type: m.type,
+                  altText: m.altText || processedCaption || fallbackAlt
+                });
+              })
             );
             logger.debug('Media uploaded successfully', { requestId, count: mediaIds.length });
           } catch (uploadError: any) {
@@ -214,6 +233,13 @@ export class SocialMediaService {
       });
       
       if (isDryRun) {
+        const validation = await this.getClient().validateToken();
+        if (!validation.valid) {
+          const error = { code: 'AUTH_VALIDATION_FAILED', message: `Dry Run Auth Check Failed: ${validation.error || 'Invalid credentials'}` };
+          StreamManager.emitQueueUpdate(this.platform, this.pageId, 'failed', { ...error, isDryRun, requestId });
+          return { success: false, error, timestamp: new Date().toISOString() };
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 800));
         const mockResult = { success: true, postId, timestamp: new Date().toISOString() };
         StreamManager.emitQueueUpdate(this.platform, this.pageId, 'completed', { ...mockResult, isDryRun, requestId });

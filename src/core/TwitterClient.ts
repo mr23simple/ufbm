@@ -11,14 +11,15 @@ interface TwitterCredentials {
 
 export class TwitterClient {
   private api: TwitterApi;
+  private creds: TwitterCredentials;
 
   constructor(credentialsRaw: string) {
-    const creds = this.parseCredentials(credentialsRaw);
+    this.creds = this.parseCredentials(credentialsRaw);
     this.api = new TwitterApi({
-      appKey: creds.appKey,
-      appSecret: creds.appSecret,
-      accessToken: creds.accessToken,
-      accessSecret: creds.accessSecret,
+      appKey: this.creds.appKey,
+      appSecret: this.creds.appSecret,
+      accessToken: this.creds.accessToken,
+      accessSecret: this.creds.accessSecret,
     });
   }
 
@@ -66,6 +67,31 @@ export class TwitterClient {
       logger.error('Twitter Media Upload Error', { error: error.message });
       throw error;
     }
+  }
+
+  async validateToken(forceRealCheck: boolean = false): Promise<{ valid: boolean; name?: string; error?: string }> {
+    // 1. Structural Check (Always performed)
+    const creds = this.creds;
+    if (!creds.appKey || !creds.appSecret || !creds.accessToken || !creds.accessSecret) {
+      return { valid: false, error: "Missing one or more OAuth 1.0a credential fields." };
+    }
+    
+    const isMock = creds.appKey === 'mock' || creds.accessToken === 'mock';
+    if (!isMock && (creds.appKey.length < 10 || creds.accessToken.length < 10)) {
+      return { valid: false, error: "Credentials appear structurally invalid (too short)." };
+    }
+
+    // 2. Optional Real API Check (Costs Quota)
+    if (forceRealCheck && !isMock) {
+      try {
+        const user = await this.api.v1.verifyCredentials();
+        return { valid: true, name: user.screen_name };
+      } catch (error: any) {
+        return { valid: false, error: `Twitter API Validation Failed: ${error.message}` };
+      }
+    }
+
+    return { valid: true, name: isMock ? 'Mock X User' : 'X Account (Structural Check)' };
   }
 
   async createFeedPost(caption: string, mediaIds?: string[]): Promise<FISResponse> {

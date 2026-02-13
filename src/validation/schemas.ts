@@ -17,18 +17,21 @@ export const PostRequestSchema = z.object({
     publishToFeed: z.boolean().default(true),
     publishToStory: z.boolean().default(false),
     dryRun: z.boolean().default(false),
+    validateToken: z.boolean().default(false),
     retryConfig: z.object({
       maxRetries: z.number().default(3),
       backoffMs: z.number().default(1000),
     }).optional(),
   }).optional(),
 }).refine(data => {
-  if (data.options?.publishToFeed !== false && !data.caption) {
-    return false;
-  }
-  return true;
+  const needsText = data.options?.publishToFeed !== false || data.options?.publishToStory === true;
+  // Has global caption OR all media has altText
+  const hasGlobalCaption = !!data.caption && data.caption.trim().length > 0;
+  const allMediaHasAlt = data.media && data.media.length > 0 && data.media.every(m => !!m.altText && m.altText.trim().length > 0);
+  
+  return !needsText || (hasGlobalCaption || allMediaHasAlt);
 }, {
-  message: "Caption is required for feed posts",
+  message: "A caption or media alt-text is required for Facebook posts and stories.",
   path: ["caption"]
 });
 

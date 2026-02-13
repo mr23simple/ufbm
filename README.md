@@ -51,15 +51,19 @@ Create a new post on the specified platform(s). Supports JSON or `multipart/form
 
 **JSON Parameters:**
 *   `platform` (string, **required**): The target platform. Supported: `fb` (Facebook), `x` (Twitter).
-*   `caption` (string): The text content of the post. **Mandatory** for feed posts, but optional if `publishToFeed` is set to `false` (e.g., for Story-only posts).
+*   `caption` (string): The text content of the post. **Mandatory** for feed posts, but optional if `publishToFeed` is set to `false` (e.g., for Story-only posts). *Note: If both caption and media altText are missing, USMM automatically generates a fallback ID (pageId_timestamp) to satisfy platform metadata requirements.*
 *   `media` (array, optional): List of media objects.
     *   `source` (string/buffer): URL or binary data of the image/video.
     *   `type` (string): Either `image` or `video`.
+    *   `altText` (string, optional): Accessibility text or story caption. Fallbacks to global `caption` if provided.
 *   `priority` (number, optional): `10` (Critical), `5` (High), `0` (Normal). Defaults to `0`.
 *   `options` (object, optional):
     *   `publishToFeed` (boolean): Default `true`.
     *   `publishToStory` (boolean): Default `false` (FB only).
-    *   `dryRun` (boolean): Default `false`.
+    *   `dryRun` (boolean): Default `false`. Performs a simulated post.
+    *   `validateToken` (boolean): Default `false`. 
+        *   **Facebook**: Always performs real-time validation against the API (safe quota).
+        *   **X (Twitter)**: By default, only structural validation is performed to save the very limited Free/Basic tier read quota. Set to `true` to force a real API verification (`v1.1/verify_credentials`).
     *   `retryConfig` (object): (Optional) `{ maxRetries: number, backoffMs: number }`.
 
 **Example Request (Facebook):**

@@ -13,6 +13,8 @@ This document outlines the requirements and features for a high-concurrency Face
 *   **Dual-Path Independence**: Separation of Feed and Story execution paths. A failure in one path does not affect the other.
 *   **Media ID Reuse**: Upload an asset once and reuse its ID for multiple posts to save bandwidth and quota.
 *   **Smart Backoff & Retries**: Automated retry logic for rate limits and internal API errors with exponential backoff.
+*   **Graph API v24.0 Compliance**: Automatically handles the mandatory `caption` (for photos) and `description` (for videos) requirements for Story publishing by propagating global captions or generating unique fallback IDs (`pageId_epoch`).
+*   **Dry Run Validation**: Integrated token health checks. Supports `validateToken: true` for real-time account verification before simulation.
 
 ### 3. Rate Limit & Safety
 *   **Bundling Prevention**: Integrated delays between consecutive posts to prevent Facebook from grouping multiple updates into a single UI element.

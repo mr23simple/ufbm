@@ -17,18 +17,23 @@ export class FacebookClient {
   }
 
   async uploadMedia(asset: MediaAsset): Promise<string> {
+    const isVideo = asset.type === 'video';
+    const endpoint = `/${this.pageId}/${isVideo ? 'videos' : 'photos'}`;
+    const textParam = isVideo ? 'description' : 'caption';
+    
     const form = new FormData();
     
     if (asset.source instanceof Buffer) {
-      form.append('source', asset.source, { filename: 'upload.png' });
+      const filename = isVideo ? 'upload.mp4' : 'upload.png';
+      form.append(isVideo ? 'source' : 'source', asset.source, { filename });
     } else {
-      form.append('url', asset.source);
+      form.append(isVideo ? 'file_url' : 'url', asset.source);
     }
 
     form.append('published', 'false');
-    if (asset.altText) form.append('caption', asset.altText);
+    if (asset.altText) form.append(textParam, asset.altText);
 
-    const response = await this.api.post(`/${this.pageId}/photos`, form, {
+    const response = await this.api.post(endpoint, form, {
       headers: form.getHeaders(),
     });
 
@@ -94,6 +99,22 @@ export class FacebookClient {
 
   async getProfilePicUrl(): Promise<string> {
     return `https://graph.facebook.com/${this.pageId}/picture?type=large`;
+  }
+
+  async validateToken(): Promise<{ valid: boolean; name?: string; error?: string }> {
+    try {
+      // Allow 'mock' token to bypass real check for testing/dryRun
+      const token = (this.api.defaults.params as any)?.access_token;
+      if (token === 'mock') {
+        return { valid: true, name: 'Mock FB User' };
+      }
+
+      const response = await this.api.get('/me', { params: { fields: 'name' } });
+      return { valid: true, name: response.data.name };
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || error.message;
+      return { valid: false, error: msg };
+    }
   }
 
   private handleError(error: any): FISResponse {

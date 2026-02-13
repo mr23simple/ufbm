@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import sharp from 'sharp';
+import { z } from 'zod';
 import { SocialMediaRegistry } from '../core/SocialMediaRegistry.js';
 import { config } from '../config.js';
 import { PostRequestSchema } from '../validation/schemas.js';
@@ -114,13 +115,21 @@ export class SocialMediaController {
         try { payload.options = JSON.parse(payload.options); } catch(e) {}
       }
 
-      const result = await service.post(payload);
-      res.status(result.success ? 200 : 500).json(result);
+      // Ensure options.dryRun matches the early-extracted isDryRun
+      if (!payload.options) payload.options = {};
+      payload.options.dryRun = isDryRun;
+
+      // Validate payload before passing to service
+      const validated = PostRequestSchema.parse(payload);
+
+      const result = await service.post(validated);
+      res.status(result.success ? 200 : (result.error?.code === 'AUTH_VALIDATION_FAILED' ? 401 : 500)).json(result);
     } catch (error: any) {
-      if (error.errors) {
-        // Zod validation error
-        logger.error('Validation Error', { details: error.errors });
-        res.status(400).json({ success: false, error: 'Validation Error', details: error.errors });
+      if (error.name === 'ZodError') {
+        logger.error('Validation Error Caught in Controller', { errors: error.errors });
+        res.status(400).json({ success: false, error: 'Validation Error', details: error.errors || error.issues });
+      } else if (error.message.includes('Invalid Twitter Credentials')) {
+        res.status(401).json({ success: false, error: error.message });
       } else {
         logger.error('API Error', { error: error.message });
         res.status(500).json({ success: false, error: error.message });
@@ -154,12 +163,12 @@ export class SocialMediaController {
         id, 
         caption, 
         priority ? Number(priority) : WorkloadPriority.HIGH,
-        dryRun === true || dryRun === 'true'
+        isDryRun
       );
       
-      res.status(result.success ? 200 : 500).json(result);
+      res.status(result.success ? 200 : (result.error?.code === 'AUTH_VALIDATION_FAILED' ? 401 : 500)).json(result);
     } catch (error: any) {
-      if (error.errors) {
+      if (error instanceof z.ZodError) {
         logger.error('Validation Error', { details: error.errors });
         res.status(400).json({ success: false, error: 'Validation Error', details: error.errors });
       } else {

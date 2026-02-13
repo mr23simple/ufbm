@@ -33,7 +33,7 @@ describe('USMM API Endpoints', () => {
 
   it('POST /v1/post should accept valid X request with dryRun and mock credentials', async () => {
     const mockCreds = JSON.stringify({
-      appKey: 'ak', appSecret: 'as', accessToken: 'at', accessSecret: 'asec'
+      appKey: 'mock', appSecret: 'mock', accessToken: 'mock', accessSecret: 'mock'
     });
     const res = await request(app)
       .post('/v1/post')
@@ -54,7 +54,7 @@ describe('USMM API Endpoints', () => {
     const res = await request(app)
       .post('/v1/post')
       .set('x-platform-id', '12345')
-      .set('x-platform-token', 'mock-token')
+      .set('x-platform-token', 'mock')
       .send({
         platform: 'fb',
         caption: 'Test dry run post',

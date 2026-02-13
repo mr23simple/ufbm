@@ -10,7 +10,8 @@ export class SocialMediaRegistry {
    * Key format: "platform:pageId" (e.g. "fb:12345", "x:98765")
    */
   static getInstance(platform: 'fb' | 'x', pageId: string, accessToken: string): SocialMediaService {
-    const key = `${platform}:${pageId}`;
+    // Include accessToken in key to ensure credential changes trigger new instance creation
+    const key = `${platform}:${pageId}:${accessToken}`;
     
     if (!this.instances.has(key)) {
       logger.info('Creating new service instance', { platform, pageId });
