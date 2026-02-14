@@ -3,6 +3,14 @@ export class SlackFormatter {
     const blocks: any[] = [];
     let text = caption.trim();
     let currentActions: any[] = [];
+    let currentMrkdwn = '';
+
+    const flushMrkdwn = () => {
+      if (currentMrkdwn.trim()) {
+        blocks.push(this.createSection(currentMrkdwn.trim()));
+        currentMrkdwn = '';
+      }
+    };
 
     const flushActions = () => {
       if (currentActions.length > 0) {
@@ -11,19 +19,25 @@ export class SlackFormatter {
       }
     };
 
+    const flushAll = () => {
+      flushMrkdwn();
+      flushActions();
+    };
+
     while (text.length > 0) {
+      // Look for structural OR inline tags that we might want to handle
       const startMatch = /<(div|a|hr|img|select|input|ul|br)\s*([^>]*?)>/i.exec(text);
 
       if (!startMatch) {
-        flushActions();
-        if (text.trim()) blocks.push(this.createSection(this.toMarkdown(text.trim())));
+        currentMrkdwn += (currentMrkdwn ? ' ' : '') + this.toMarkdown(text.trim());
+        text = '';
         break;
       }
 
+      // Handle text before the tag
       const before = text.substring(0, startMatch.index).trim();
       if (before) {
-        flushActions();
-        blocks.push(this.createSection(this.toMarkdown(before)));
+        currentMrkdwn += (currentMrkdwn ? ' ' : '') + this.toMarkdown(before);
       }
 
       const tag = startMatch[1].toLowerCase();
@@ -41,18 +55,16 @@ export class SlackFormatter {
         }
       }
 
-      if ((tag === 'a' && (className.includes('btn') || attrs.value)) || tag === 'input' || (tag === 'select' && (className.includes('overflow') || !content.includes('field')))) {
-        if (tag === 'a') {
-          const style = className.includes('danger') ? 'danger' : (className.includes('primary') ? 'primary' : undefined);
-          currentActions.push(this.createButton(content, attrs.href || '#', style, attrs.value));
-        } else if (tag === 'input') {
-          if (attrs.type === 'date') currentActions.push({ type: 'datepicker', initial_date: attrs.value, placeholder: { type: 'plain_text', text: attrs.placeholder || 'Select date' } });
-          else if (attrs.type === 'time') currentActions.push({ type: 'timepicker', initial_time: attrs.value, placeholder: { type: 'plain_text', text: attrs.placeholder || 'Select time' } });
-        } else if (tag === 'select') {
-          currentActions.push(this.createSelect(content, attrs.placeholder, className.includes('overflow'), attrs.multiple !== undefined));
-        }
-      } else {
-        flushActions();
+      // Logic: Is this a block-level element or an inline element?
+      const isButton = tag === 'a' && (className.includes('btn') || attrs.value);
+      const isBlock = ['div', 'hr', 'ul', 'select', 'input'].includes(tag) || (tag === 'img' && !content);
+
+      if (isButton) {
+        flushMrkdwn();
+        const style = className.includes('danger') ? 'danger' : (className.includes('primary') ? 'primary' : undefined);
+        currentActions.push(this.createButton(this.toMarkdown(content), attrs.href || '#', style, attrs.value));
+      } else if (isBlock) {
+        flushAll();
         if (tag === 'div') {
           if (className === 'section') blocks.push(this.parseComplexSection(content));
           else if (className === 'header') blocks.push(this.createHeader(content));
@@ -65,15 +77,32 @@ export class SlackFormatter {
           blocks.push({ type: 'divider' });
         } else if (tag === 'img') {
           blocks.push(this.createImage(attrs.src || '', attrs.title, attrs.alt));
-        } else if (tag === 'a') {
-          blocks.push(this.createSection(`<${attrs.href || '#'}|${this.toMarkdown(content)}>`));
+        } else if (tag === 'select') {
+          blocks.push({ type: 'actions', elements: [this.createSelect(content, attrs.placeholder, className.includes('overflow'), attrs.multiple !== undefined)] });
+        } else if (tag === 'input') {
+          const picker: any = { placeholder: { type: 'plain_text', text: attrs.placeholder || 'Select' } };
+          if (attrs.type === 'date') { picker.type = 'datepicker'; picker.initial_date = attrs.value; }
+          else if (attrs.type === 'time') { picker.type = 'timepicker'; picker.initial_time = attrs.value; }
+          blocks.push({ type: 'actions', elements: [picker] });
+        }
+      } else {
+        // Inline element: a (non-button), br, or unknown
+        if (tag === 'a') {
+          currentMrkdwn += (currentMrkdwn ? ' ' : '') + `<${attrs.href || '#'}|${this.toMarkdown(content)}>`;
+        } else if (tag === 'br') {
+          currentMrkdwn += '\n';
         }
       }
+
       text = text.substring(startMatch.index + fullTagLength).trim();
     }
 
-    flushActions();
-    if (media && media.length > 0) media.forEach(m => { if (m.type === 'image') blocks.push(this.createImage(m.id)); });
+    flushAll();
+
+    if (media && media.length > 0) {
+      media.forEach(m => { if (m.type === 'image') blocks.push(this.createImage(m.id)); });
+    }
+
     return blocks.length > 0 ? blocks : [this.createSection('Empty message')];
   }
 
