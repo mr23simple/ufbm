@@ -46,7 +46,23 @@ The `PostRequestSchema` has been updated to accept `platform: 'fb' | 'x'`.
 *   **Facebook:** `caption` -> Message, `media` -> Photos/Videos.
 *   **X:** `caption` -> Tweet Text (max 280 chars), `media` -> Max 4 photos or 1 video.
 
-## 5. Next Steps
-1.  Refactor `FIS` class to `SocialMediaService`.
-2.  Implement `TwitterClient`.
-3.  Update `controller.ts` to instantiate the correct client based on the `platform` param.
+## 5. Roadmap
+
+### Core Infrastructure
+- [x] Refactor `FIS` class to `SocialMediaService`
+- [x] Implement `USMMRegistry` for multi-platform instance management
+- [x] Implement `TwitterClient` with OAuth 1.0a support
+- [x] Update `SocialMediaController` for platform-based routing
+- [x] Fix multipart/form-data merging for media metadata and alt-text
+
+### Platform Enhancements
+- [ ] Add support for X (Twitter) multi-image uploads (up to 4)
+- [ ] Implement Twitter-specific character limit validation (280 chars)
+- [ ] Add support for Instagram via Facebook Graph API
+- [ ] Implement LinkedIn integration
+
+### Reliability & UX
+- [ ] Implement persistent queue storage (Redis or SQLite)
+- [ ] Add a dashboard tab for managing platform credentials
+- [ ] Support scheduled posts with a calendar view
+- [ ] Add more robust error recovery for partial batch failures

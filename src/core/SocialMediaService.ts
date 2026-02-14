@@ -87,6 +87,7 @@ export class SocialMediaService {
 
     if (!isDryRun) {
       this.ensureLogoCached(); // Fire and forget
+      await this.queue.addPersistentTask(requestId, this.platform, this.pageId, validated, validated.priority);
     }
 
     return this.queue.add(async () => {
@@ -216,7 +217,7 @@ export class SocialMediaService {
           timestamp: new Date().toISOString()
         };
       }
-    }, validated.priority, true, isDryRun);
+    }, validated.priority, true, isDryRun, isDryRun ? undefined : requestId);
   }
 
   async updatePost(postId: string, newCaption: string, priority: WorkloadPriority = WorkloadPriority.HIGH, dryRun: boolean = false): Promise<FISResponse> {
@@ -227,6 +228,7 @@ export class SocialMediaService {
     
     if (!isDryRun) {
       this.ensureLogoCached();
+      await this.queue.addPersistentTask(requestId, this.platform, this.pageId, { action: 'update', postId, newCaption }, priority);
     }
 
     return this.queue.add(async () => {
@@ -253,7 +255,7 @@ export class SocialMediaService {
       const result = await this.getClient().updatePost(postId, newCaption);
       StreamManager.emitQueueUpdate(this.platform, this.pageId, result.success ? 'completed' : 'failed', { postId, requestId });
       return result;
-    }, priority, false, isDryRun);
+    }, priority, false, isDryRun, isDryRun ? undefined : requestId);
   }
 
   private ensureRobustCaption(caption?: string): string {

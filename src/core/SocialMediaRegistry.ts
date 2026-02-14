@@ -1,16 +1,13 @@
 import { SocialMediaService } from './SocialMediaService.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { Database } from './Database.js';
 
 export class SocialMediaRegistry {
   private static instances: Map<string, SocialMediaService> = new Map();
+  private static db = Database.getInstance();
 
-  /**
-   * Retrieves or creates a service instance for a specific Platform and ID.
-   * Key format: "platform:pageId" (e.g. "fb:12345", "x:98765")
-   */
   static getInstance(platform: 'fb' | 'x', pageId: string, accessToken: string): SocialMediaService {
-    // Include accessToken in key to ensure credential changes trigger new instance creation
     const key = `${platform}:${pageId}:${accessToken}`;
     
     if (!this.instances.has(key)) {
@@ -25,6 +22,20 @@ export class SocialMediaRegistry {
       });
 
       this.instances.set(key, instance);
+
+      // Persist account if not dry-run anonymous
+      if (pageId !== 'dry-run-user' && pageId !== 'anonymous' && accessToken !== 'none') {
+        try {
+          const stmt = this.db.prepare(`
+            INSERT INTO accounts (platform, platform_id, access_token)
+            VALUES (?, ?, ?)
+            ON CONFLICT(platform, platform_id) DO UPDATE SET access_token = EXCLUDED.access_token
+          `);
+          stmt.run(platform, pageId, accessToken);
+        } catch (e: any) {
+          logger.warn('Failed to persist account to DB', { error: e.message });
+        }
+      }
     }
     
     return this.instances.get(key)!;
