@@ -105,14 +105,23 @@ export class SocialMediaController {
       }
 
       if (files && files.length > 0) {
-        if (!payload.media) payload.media = [];
-        for (const file of files) {
+        if (!payload.media || !Array.isArray(payload.media)) {
+          payload.media = [];
+        }
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
           const buffer = isDryRun ? file.buffer : await SocialMediaController.optimizeMedia(file);
-          payload.media.push({
+          const mediaItem = {
             source: buffer,
             type: file.mimetype.startsWith('video') ? 'video' : 'image',
             mimeType: !isDryRun && file.mimetype.startsWith('image/') ? 'image/jpeg' : file.mimetype,
-          });
+          };
+
+          if (payload.media[i]) {
+            payload.media[i] = { ...payload.media[i], ...mediaItem };
+          } else {
+            payload.media.push(mediaItem);
+          }
         }
       }
 

@@ -18,7 +18,7 @@ describe('USMM Load Simulation (Dry Run)', () => {
         return request(app)
           .post('/v1/post')
           .set('x-platform-id', scenario.id)
-          .set('x-platform-token', `token_${scenario.id}`)
+          .set('x-platform-token', 'mock')
           .send({
             platform: 'fb',
             caption: `Load Test Request ${i+1} for ${scenario.id}`,

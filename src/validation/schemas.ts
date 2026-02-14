@@ -6,7 +6,11 @@ export const MediaSchema = z.object({
   type: z.enum(['image', 'video']),
   mimeType: z.string().optional(),
   altText: z.string().optional(),
-});
+  alt_text: z.string().optional(),
+}).transform(data => ({
+  ...data,
+  altText: data.altText || data.alt_text,
+}));
 
 export const PostRequestSchema = z.object({
   platform: z.enum(['fb', 'x']),
@@ -24,12 +28,20 @@ export const PostRequestSchema = z.object({
     }).optional(),
   }).optional(),
 }).refine(data => {
+  // X (Twitter) allows media-only posts without text
+  if (data.platform === 'x') return true;
+
   const needsText = data.options?.publishToFeed !== false || data.options?.publishToStory === true;
-  // Has global caption OR all media has altText
+  if (!needsText) return true;
+
+  // Has global caption OR at least one media has altText (which FB uses as a fallback message)
   const hasGlobalCaption = !!data.caption && data.caption.trim().length > 0;
-  const allMediaHasAlt = data.media && data.media.length > 0 && data.media.every(m => !!m.altText && m.altText.trim().length > 0);
+  const hasMediaAlt = data.media && data.media.length > 0 && data.media.some(m => {
+    const text = m.altText || (m as any).alt_text;
+    return !!text && text.trim().length > 0;
+  });
   
-  return !needsText || (hasGlobalCaption || allMediaHasAlt);
+  return hasGlobalCaption || hasMediaAlt;
 }, {
   message: "A caption or media alt-text is required for Facebook posts and stories.",
   path: ["caption"]
