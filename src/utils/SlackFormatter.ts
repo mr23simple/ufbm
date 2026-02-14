@@ -1,7 +1,7 @@
 export class SlackFormatter {
   static parse(caption: string, media?: { id: string, type: 'image' | 'video' }[]): any[] {
     const blocks: any[] = [];
-    let text = caption.trim();
+    let text = caption; // Preserving original whitespace
     let currentActions: any[] = [];
     let currentMrkdwn = '';
 
@@ -19,26 +19,20 @@ export class SlackFormatter {
       }
     };
 
-    const flushAll = () => {
-      flushMrkdwn();
-      flushActions();
-    };
+    const flushAll = () => { flushMrkdwn(); flushActions(); };
 
     while (text.length > 0) {
-      // Look for structural OR inline tags that we might want to handle
       const startMatch = /<(div|a|hr|img|select|input|ul|br)\s*([^>]*?)>/i.exec(text);
 
       if (!startMatch) {
-        currentMrkdwn += (currentMrkdwn ? ' ' : '') + this.toMarkdown(text.trim());
+        currentMrkdwn += this.toMarkdown(text);
         text = '';
         break;
       }
 
-      // Handle text before the tag
-      const before = text.substring(0, startMatch.index).trim();
-      if (before) {
-        currentMrkdwn += (currentMrkdwn ? ' ' : '') + this.toMarkdown(before);
-      }
+      // Add text before the tag EXACTLY as it is
+      const before = text.substring(0, startMatch.index);
+      currentMrkdwn += this.toMarkdown(before);
 
       const tag = startMatch[1].toLowerCase();
       const attrs = this.parseAttributes(startMatch[2]);
@@ -50,59 +44,48 @@ export class SlackFormatter {
       if (['div', 'a', 'select', 'ul'].includes(tag)) {
         const closeIndex = this.findMatchingCloseTag(text, startMatch.index, tag);
         if (closeIndex !== -1) {
-          content = text.substring(startMatch.index + startMatch[0].length, closeIndex).trim();
+          content = text.substring(startMatch.index + startMatch[0].length, closeIndex);
           fullTagLength = (closeIndex + `</${tag}>`.length) - startMatch.index;
         }
       }
 
-      // Logic: Is this a block-level element or an inline element?
       const isButton = tag === 'a' && (className.includes('btn') || attrs.value);
       const isBlock = ['div', 'hr', 'ul', 'select', 'input'].includes(tag) || (tag === 'img' && !content);
 
       if (isButton) {
         flushMrkdwn();
         const style = className.includes('danger') ? 'danger' : (className.includes('primary') ? 'primary' : undefined);
-        currentActions.push(this.createButton(this.toMarkdown(content), attrs.href || '#', style, attrs.value));
+        currentActions.push(this.createButton(this.toMarkdown(content).trim(), attrs.href || '#', style, attrs.value));
       } else if (isBlock) {
         flushAll();
+        const trimmedContent = content.trim();
         if (tag === 'div') {
-          if (className === 'section') blocks.push(this.parseComplexSection(content));
-          else if (className === 'header') blocks.push(this.createHeader(content));
-          else if (className === 'context') blocks.push(this.parseContext(content));
+          if (className === 'section') blocks.push(this.parseComplexSection(trimmedContent));
+          else if (className === 'header') blocks.push(this.createHeader(trimmedContent));
+          else if (className === 'context') blocks.push(this.parseContext(trimmedContent));
           else if (className === 'divider') blocks.push({ type: 'divider' });
-          else blocks.push(this.createSection(this.toMarkdown(content)));
-        } else if (tag === 'ul') {
-          blocks.push(this.createRichTextList(content));
-        } else if (tag === 'hr') {
-          blocks.push({ type: 'divider' });
-        } else if (tag === 'img') {
-          blocks.push(this.createImage(attrs.src || '', attrs.title, attrs.alt));
-        } else if (tag === 'select') {
-          blocks.push({ type: 'actions', elements: [this.createSelect(content, attrs.placeholder, className.includes('overflow'), attrs.multiple !== undefined)] });
-        } else if (tag === 'input') {
+          else blocks.push(this.createSection(this.toMarkdown(trimmedContent)));
+        } else if (tag === 'ul') blocks.push(this.createRichTextList(trimmedContent));
+        else if (tag === 'hr') blocks.push({ type: 'divider' });
+        else if (tag === 'img') blocks.push(this.createImage(attrs.src || '', attrs.title, attrs.alt));
+        else if (tag === 'select') blocks.push({ type: 'actions', elements: [this.createSelect(trimmedContent, attrs.placeholder, className.includes('overflow'), attrs.multiple !== undefined)] });
+        else if (tag === 'input') {
           const picker: any = { placeholder: { type: 'plain_text', text: attrs.placeholder || 'Select' } };
           if (attrs.type === 'date') { picker.type = 'datepicker'; picker.initial_date = attrs.value; }
           else if (attrs.type === 'time') { picker.type = 'timepicker'; picker.initial_time = attrs.value; }
           blocks.push({ type: 'actions', elements: [picker] });
         }
       } else {
-        // Inline element: a (non-button), br, or unknown
-        if (tag === 'a') {
-          currentMrkdwn += (currentMrkdwn ? ' ' : '') + `<${attrs.href || '#'}|${this.toMarkdown(content)}>`;
-        } else if (tag === 'br') {
-          currentMrkdwn += '\n';
-        }
+        // Inline
+        if (tag === 'a') currentMrkdwn += `<${attrs.href || '#'}|${this.toMarkdown(content)}>`;
+        else if (tag === 'br') currentMrkdwn += '\n';
       }
 
-      text = text.substring(startMatch.index + fullTagLength).trim();
+      text = text.substring(startMatch.index + fullTagLength);
     }
 
     flushAll();
-
-    if (media && media.length > 0) {
-      media.forEach(m => { if (m.type === 'image') blocks.push(this.createImage(m.id)); });
-    }
-
+    if (media && media.length > 0) media.forEach(m => { if (m.type === 'image') blocks.push(this.createImage(m.id)); });
     return blocks.length > 0 ? blocks : [this.createSection('Empty message')];
   }
 
@@ -202,17 +185,11 @@ export class SlackFormatter {
     return img;
   }
   private static createButton(content: string, url: string, style?: string, value?: string) {
-    let cleanText = content;
-    let confirm: any = null;
+    let cleanText = content; let confirm: any = null;
     const confirmMatch = /<confirm\s*([^>]*?)>([\s\S]*?)<\/confirm>/i.exec(content);
     if (confirmMatch) {
       const cAttrs = this.parseAttributes(confirmMatch[1]);
-      confirm = {
-        title: { type: 'plain_text', text: cAttrs.title || 'Are you sure?' },
-        text: { type: 'plain_text', text: confirmMatch[2].trim() },
-        confirm: { type: 'plain_text', text: cAttrs.confirm || 'Yes' },
-        deny: { type: 'plain_text', text: cAttrs.deny || 'No' }
-      };
+      confirm = { title: { type: 'plain_text', text: cAttrs.title || 'Are you sure?' }, text: { type: 'plain_text', text: confirmMatch[2].trim() }, confirm: { type: 'plain_text', text: cAttrs.confirm || 'Yes' }, deny: { type: 'plain_text', text: cAttrs.deny || 'No' } };
       cleanText = content.replace(confirmMatch[0], '').trim();
     }
     const btn: any = { type: 'button', text: { type: 'plain_text', text: this.toMarkdown(cleanText).replace(/\*/g, ''), emoji: true } };
