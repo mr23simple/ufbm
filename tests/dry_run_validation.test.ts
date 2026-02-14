@@ -135,6 +135,36 @@ describe('Refined Dry Run & Validation Tests', () => {
     });
   });
 
+  describe('Slack Webhook Validation', () => {
+    it('should fail if Slack Webhook URL is invalid', async () => {
+      const res = await request(app)
+        .post('/v1/slack/post')
+        .set('x-platform-id', 'slack')
+        .set('x-platform-token', 'https://invalid-domain.com/webhook')
+        .send({
+          caption: 'Slack test',
+          options: { dryRun: true }
+        });
+      
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('Invalid Slack Webhook URL');
+    });
+
+    it('should pass if Slack Webhook URL is structurally valid', async () => {
+      const res = await request(app)
+        .post('/v1/slack/post')
+        .set('x-platform-id', 'slack')
+        .set('x-platform-token', 'https://hooks.slack.com/services/T000/B000/XXXX')
+        .send({
+          caption: 'Slack test',
+          options: { dryRun: true }
+        });
+      
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
   describe('Update Post Dry Run', () => {
     it('should validate token during update dryRun', async () => {
       const res = await request(app)
