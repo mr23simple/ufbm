@@ -3,11 +3,18 @@ import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
 
-// Load .env.local if it exists, otherwise fallback to .env
-if (fs.existsSync(path.join(process.cwd(), '.env.local'))) {
-  dotenv.config({ path: path.join(process.cwd(), '.env.local') });
-} else {
-  dotenv.config();
+// Load default .env
+dotenv.config();
+
+// Only load .env.local for development/local environments
+if (process.env.NODE_ENV !== 'production') {
+  const localEnvPath = path.join(process.cwd(), '.env.local');
+  if (fs.existsSync(localEnvPath)) {
+    const localConfig = dotenv.parse(fs.readFileSync(localEnvPath));
+    for (const k in localConfig) {
+      process.env[k] = localConfig[k];
+    }
+  }
 }
 
 const EnvSchema = z.object({
