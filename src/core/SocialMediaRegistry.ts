@@ -25,9 +25,16 @@ export class SocialMediaRegistry {
 
       // Persist account if not dry-run anonymous
       if (pageId !== 'dry-run-user' && pageId !== 'anonymous' && accessToken !== 'none') {
-        this.db.saveAccount(platform, pageId, accessToken, {}).catch(e => {
-          logger.warn('Failed to persist account to Redis', { error: e.message });
+        this.db.saveAccount(platform, pageId, accessToken, {}).then(() => {
+          return this.db.extendAccountSession(platform, pageId);
+        }).catch(e => {
+          logger.warn('Failed to persist/expire account in Redis', { error: e.message });
         });
+      }
+    } else {
+      // If instance exists, still extend the session in Redis to keep it alive for another day
+      if (pageId !== 'dry-run-user' && pageId !== 'anonymous') {
+        this.db.extendAccountSession(platform, pageId).catch(() => {});
       }
     }
     

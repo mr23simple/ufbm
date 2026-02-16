@@ -52,6 +52,15 @@ export class Database {
     return await this.redis.hgetall(key);
   }
 
+  /**
+   * Extends the life of an account record by 1 day (86400 seconds).
+   * Records not accessed for 24 hours will be automatically removed from Redis.
+   */
+  async extendAccountSession(platform: string, platformId: string) {
+    const key = `usmm:account:${platform}:${platformId}`;
+    await this.redis.expire(key, 86400);
+  }
+
   // Task management
   async saveTask(task: any) {
     const taskKey = `usmm:task:${task.id}`;
