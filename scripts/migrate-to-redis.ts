@@ -4,11 +4,17 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
-// Load env
-if (fs.existsSync('.env.local')) {
-  dotenv.config({ path: '.env.local' });
-} else {
-  dotenv.config();
+// Load default .env
+dotenv.config();
+
+// Only load .env.local for development/local environments
+if (process.env.NODE_ENV !== 'production') {
+  if (fs.existsSync('.env.local')) {
+    const localConfig = dotenv.parse(fs.readFileSync('.env.local'));
+    for (const k in localConfig) {
+      process.env[k] = localConfig[k];
+    }
+  }
 }
 
 async function migrate() {
