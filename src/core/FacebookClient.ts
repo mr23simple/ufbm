@@ -109,10 +109,57 @@ export class FacebookClient {
 
     const videoId = finishRes.data.id || finishRes.data.video_id;
 
-    // Wait for processing to begin (basic polling can be added if needed)
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for processing to begin and poll for readiness
+    logger.debug('FB video upload finished, polling for readiness...', { videoId });
+    const isReady = await this.pollVideoStatus(videoId);
+    
+    if (!isReady) {
+      logger.warn('FB video status polling timed out or failed, proceeding anyway...', { videoId });
+    }
 
     return videoId;
+  }
+
+  private async pollVideoStatus(videoId: string, maxAttempts = 6): Promise<boolean> {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await this.api.get(`/${videoId}`, { params: { fields: 'status' } });
+        const status = res.data.status?.video_status;
+        logger.debug(`Checking FB video status`, { videoId, status, attempt: i + 1 });
+        
+        if (status === 'ready') return true;
+        if (status === 'deleted' || status === 'error') {
+          logger.error('FB video processing failed', { videoId, status });
+          return false;
+        }
+        
+        // Wait longer between polls (starting at 5s, then 10s, 15s...)
+        await new Promise(resolve => setTimeout(resolve, 5000 * (i + 1)));
+      } catch (e: any) {
+        logger.warn(`Error polling video status`, { videoId, error: e.message });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+    return false;
+  }
+
+  private async requestWithRetry<T>(fn: () => Promise<T>, retries = 2, delay = 3000): Promise<T> {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const statusCode = error.response?.status;
+      const errorCode = error.response?.data?.error?.code;
+      
+      // Retry on 500 (Internal Server Error) or code 1 (Unknown error)
+      if (retries > 0 && (statusCode === 500 || errorCode === 1)) {
+        logger.warn(`Facebook API transient error (Status: ${statusCode}, Code: ${errorCode}). Retrying...`, { 
+          retriesLeft: retries 
+        });
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.requestWithRetry(fn, retries - 1, delay * 2);
+      }
+      throw error;
+    }
   }
 
   async createFeedPost(caption: string, media?: { id: string, type: 'image' | 'video' }[], options?: any): Promise<FISResponse> {
@@ -122,13 +169,12 @@ export class FacebookClient {
 
       if (hasVideo && videoId) {
         // Videos MUST be published via the video node or /videos endpoint
-        // To publish an unpublished video, we POST to the video ID itself
-        const response = await this.api.post(`/${videoId}`, null, {
+        const response = await this.requestWithRetry(() => this.api.post(`/${videoId}`, null, {
           params: { 
             description: caption,
             published: true 
           }
-        });
+        }));
         return {
           success: true,
           postId: response.data.id || videoId,
@@ -144,7 +190,7 @@ export class FacebookClient {
         );
       }
 
-      const response = await this.api.post(`/${this.pageId}/feed`, null, { params });
+      const response = await this.requestWithRetry(() => this.api.post(`/${this.pageId}/feed`, null, { params }));
 
       return {
         success: true,
@@ -161,9 +207,9 @@ export class FacebookClient {
       const endpoint = type === 'video' ? `/${this.pageId}/video_stories` : `/${this.pageId}/photo_stories`;
       const paramName = type === 'video' ? 'video_id' : 'photo_id';
       
-      const response = await this.api.post(endpoint, null, {
+      const response = await this.requestWithRetry(() => this.api.post(endpoint, null, {
         params: { [paramName]: mediaId }
-      });
+      }));
 
       return {
         success: true,
@@ -177,9 +223,9 @@ export class FacebookClient {
 
   async updatePost(postId: string, newCaption: string): Promise<FISResponse> {
     try {
-      const response = await this.api.post(`/${postId}`, null, {
+      const response = await this.requestWithRetry(() => this.api.post(`/${postId}`, null, {
         params: { message: newCaption }
-      });
+      }));
 
       return {
         success: response.data.success,
@@ -214,11 +260,18 @@ export class FacebookClient {
   private handleError(error: any): FISResponse {
     const errorData = error.response?.data;
     const statusCode = error.response?.status;
+    const requestInfo = {
+      method: error.config?.method,
+      url: error.config?.url,
+      params: error.config?.params,
+      hasData: !!error.config?.data
+    };
 
     logger.error('Facebook API Error', { 
       status: statusCode, 
       data: errorData,
-      message: error.message 
+      message: error.message,
+      request: requestInfo
     });
 
     return {
