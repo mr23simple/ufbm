@@ -31,6 +31,8 @@ export interface FISResponse {
     code: string;
     message: string;
     raw?: any;
+    isRateLimited?: boolean;
+    retryAfter?: number;
   };
   timestamp: string;
 }
