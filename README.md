@@ -247,6 +247,28 @@ The system includes simulation scripts to verify high-concurrency handling and U
 2. `pnpm dev` (Port 3005)
 3. `pnpm build`
 
+## 🔄 CI/CD Pipeline
+
+USMM uses Jenkins for automated build and deployment.
+
+**Jenkinsfile Location:** `usmm/Jenkinsfile`
+
+**Deployment Target:** OCI web-server (138.2.50.218)
+
+**Pipeline Stages:**
+1. **Checkout and Build**
+   - Installs pnpm and dependencies
+   - TypeScript type checking (`tsc --noEmit`)
+   - Builds the service (`pnpm run build`)
+
+2. **Deploy to Production**
+   - Pulls latest code from GitHub
+   - Installs dependencies and builds on server
+   - Restarts PM2 services via `ecosystem.config.cjs`
+
+**Services Managed:**
+- `usmm` - Social Media Manager gateway (Port 3005)
+
 ## 📝 Logging
 
 USMM uses structured logging with Winston. All log messages include a `[USMM]` service identifier for Dr.Oc monitoring compatibility.
