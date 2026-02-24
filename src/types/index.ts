@@ -35,4 +35,7 @@ export interface FISResponse {
     retryAfter?: number;
   };
   timestamp: string;
+  // Fallback indication - set when media upload fails and text-only is posted
+  fallbackToTextOnly?: boolean;
+  fallbackReason?: string;
 }

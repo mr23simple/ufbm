@@ -5,8 +5,7 @@ import { QueueManager } from './QueueManager.js';
 import { PostRequestSchema } from '../validation/schemas.js';
 import type { PostRequest } from '../validation/schemas.js';
 import { z } from 'zod';
-import { WorkloadPriority } from '../types/index.js';
-import type { FISResponse } from '../types/index.js';
+import { WorkloadPriority, FISResponse } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { StreamManager } from './StreamManager.js';
 import { config } from '../config.js';
@@ -20,16 +19,6 @@ export interface ServiceConfig {
   accessToken: string;
   concurrency?: number;
   publishRateLimit?: number;
-}
-
-export interface FISResponse {
-  success: boolean;
-  postId?: string;
-  error?: { code: string; message: string; raw?: any };
-  timestamp: string;
-  // Fallback indication
-  fallbackToTextOnly?: boolean;
-  fallbackReason?: string;
 }
 
 type GenericClient = FacebookClient | TwitterClient | SlackClient;
