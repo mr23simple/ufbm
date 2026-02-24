@@ -50,9 +50,6 @@ pipeline {
         }
         
         stage('Deploy to Production') {
-            when {
-                branch 'main'
-            }
             steps {
                 echo 'Deploying USMM to production...'
                 sh '''
