@@ -28,7 +28,16 @@ export class FacebookClient {
     }
 
     if (isVideo) {
-      return this.uploadVideoChunked(buffer, asset.mimeType);
+      try {
+        return await this.uploadVideoChunked(buffer, asset.mimeType);
+      } catch (videoError: any) {
+        // Re-throw video errors so SocialMediaService can detect them
+        logger.error('Video upload failed, throwing error for text-only fallback', { 
+          error: videoError.message,
+          isVideo: true 
+        });
+        throw videoError;
+      }
     }
 
     // Standard Photo Upload (Single POST)

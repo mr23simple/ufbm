@@ -232,6 +232,28 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Spider Pipelin
     *   **Strict Validation**: USMM performs real-time metadata validation for images (resolution/integrity) and structural validation for multi-part auth tokens.
     *   **High-Reliability Video (Chunked Uploads)**: Large video assets (up to 100MB) are processed using chunked/resumable upload protocols for both Facebook and X (Twitter), ensuring parity and stability for high-res content like seismic replays.
     *   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected by the target platform.
+    *   **Fallback Indication**: When media upload fails, the response includes `fallbackToTextOnly: true` and `fallbackReason` fields to help clients detect and handle text-only fallbacks appropriately.
+
+### 4.1 Fallback Response Fields
+When USMM automatically falls back to text-only posting (due to media upload failure), the response includes additional fields:
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `fallbackToTextOnly` | boolean | Set to `true` when media upload failed and text-only was posted |
+| `fallbackReason` | string | The error message from the failed media upload |
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "postId": "1234567890",
+  "timestamp": "2026-02-24T12:00:00.000Z",
+  "fallbackToTextOnly": true,
+  "fallbackReason": "Video file size exceeds 100MB limit"
+}
+```
+
+This allows calling services (like PHWC) to detect when a video post was downgraded to text-only and handle it appropriately (e.g., skip retries, log warnings, etc.).
 ---
 
 ## 🧪 Stress Testing

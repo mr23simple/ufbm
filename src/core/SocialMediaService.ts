@@ -22,6 +22,16 @@ export interface ServiceConfig {
   publishRateLimit?: number;
 }
 
+export interface FISResponse {
+  success: boolean;
+  postId?: string;
+  error?: { code: string; message: string; raw?: any };
+  timestamp: string;
+  // Fallback indication
+  fallbackToTextOnly?: boolean;
+  fallbackReason?: string;
+}
+
 type GenericClient = FacebookClient | TwitterClient | SlackClient;
 
 export class SocialMediaService {
@@ -139,6 +149,9 @@ export class SocialMediaService {
       try {
         let mediaIds: string[] = [];
 
+        let fallbackToTextOnly = false;
+        let fallbackReason = '';
+        
         if (validated.media && validated.media.length > 0) {
           try {
             mediaIds = await Promise.all(
@@ -153,7 +166,9 @@ export class SocialMediaService {
             );
             logger.debug('Media uploaded successfully', { requestId, count: mediaIds.length });
           } catch (uploadError: any) {
-            logger.error('Media upload failed, falling back to text-only', { requestId, error: uploadError.message });
+            fallbackToTextOnly = true;
+            fallbackReason = uploadError.message || 'Media upload failed';
+            logger.error('Media upload failed, falling back to text-only', { requestId, error: fallbackReason });
           }
         }
 
@@ -195,11 +210,17 @@ export class SocialMediaService {
           }
         }
 
-        const finalResult = results[0] || { 
+        const finalResult: FISResponse = results[0] || { 
           success: false, 
           error: { code: 'NO_ACTION', message: 'No publish targets selected' },
           timestamp: new Date().toISOString()
         };
+        
+        // Add fallback indication if media upload failed
+        if (fallbackToTextOnly) {
+          finalResult.fallbackToTextOnly = true;
+          finalResult.fallbackReason = fallbackReason;
+        }
 
         StreamManager.emitQueueUpdate(this.platform, this.pageId, finalResult.success ? 'completed' : 'failed', { 
           postId: finalResult.postId,
