@@ -35,7 +35,7 @@ pipeline {
                 echo 'Deploying USMM to production...'
                 withCredentials([usernamePassword(credentialsId: 'github-rtxrs', passwordVariable: 'GITHUB_TOKEN', usernameVariable: 'GITHUB_USER')]) {
                     sshagent(['oci-web-server']) {
-                        sh '''
+                        sh """
                             ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_SERVER} "
                                 if [ ! -d /var/www/usmm/.git ]; then
                                     sudo mkdir -p /var/www
@@ -44,19 +44,29 @@ pipeline {
                                     sudo git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
                                 fi
 
-                                sudo -i bash -c '
-                                    # Find where node is on THIS specific server
-                                    NODE_PATH=$(command -v node || echo "/usr/bin/node")
+                                sudo bash <<'EOF'
+                                    # 1. Setup the environment (Literal values)
+                                    export NODE_BIN_DIR='/root/.nvm/versions/node/v24.13.0/bin'
+                                    export PNPM_BIN_DIR='/root/.local/share/pnpm'
                                     
-                                    cd /var/www/usmm && \
-                                    git config --global --add safe.directory /var/www/usmm && \
-                                    git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main && \
-                                    $NODE_PATH /root/.local/share/pnpm/pnpm install && \
-                                    $NODE_PATH /root/.local/share/pnpm/pnpm run build && \
-                                    pm2 restartOrReload ecosystem.config.cjs
-                                '
+                                    # 2. Update PATH (Use $$$ to escape for Groovy AND Shell)
+                                    export PATH=$$NODE_BIN_DIR:$$PNPM_BIN_DIR:$$PATH
+                                    
+                                    # 3. Navigate and pull
+                                    cd /var/www/usmm
+                                    git config --global --add safe.directory /var/www/usmm
+                                    git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main
+                                    
+                                    # 4. Execute commands
+                                    pnpm install
+                                    pnpm run build
+                                    
+                                    # 5. Restart or Start Services
+                                    pm2 restartOrReload ecosystem.config.cjs || true
+                                    pm2 save
+EOF
                             "
-                        '''
+                        """
                     }
                 }
             }
