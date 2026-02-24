@@ -43,11 +43,11 @@ pipeline {
                                     git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
                                 fi
                                 cd /var/www/usmm && \\
-                                sudo git config --global --add safe.directory /var/www/usmm && \\
-                                sudo git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main && \\
-                                sudo pnpm install && \\
-                                sudo pnpm run build && \\
-                                sudo pm2 restart ${SERVICE_NAME}
+                                sudo -i git config --global --add safe.directory /var/www/usmm && \\
+                                sudo -i git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main && \\
+                                sudo -i /root/.local/share/pnpm/pnpm install && \\
+                                sudo -i /root/.local/share/pnpm/pnpm run build && \\
+                                sudo -i pm2 restart ${SERVICE_NAME}
                             "
                         '''
                     }
