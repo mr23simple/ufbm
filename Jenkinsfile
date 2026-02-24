@@ -53,12 +53,12 @@ pipeline {
             steps {
                 echo 'Deploying USMM to production...'
                 sh '''
-                    ssh -o StrictHostKeyChecking=no root@${TARGET_SERVER} '
+                    ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_SERVER} '
                         cd ${TARGET_PATH} && \\
                         git pull origin main && \\
-                        pnpm install && \\
-                        pnpm run build && \\
-                        pm2 restart ${SERVICE_NAME}
+                        sudo pnpm install && \\
+                        sudo pnpm run build && \\
+                        sudo pm2 restart ${SERVICE_NAME}
                     '
                 '''
             }
