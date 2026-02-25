@@ -25,7 +25,8 @@ pipeline {
             steps {
                 echo 'Checking out and building USMM...'
                 checkout scm
-                sh 'npm install -g pnpm && pnpm install --frozen-lockfile'
+                sh 'pnpm --version || npm install -g pnpm'
+                sh 'pnpm install --frozen-lockfile --ignore-scripts'
                 sh 'npx tsc --noEmit || true'
                 sh 'pnpm run build'
             }
