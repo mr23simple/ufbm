@@ -31,6 +31,21 @@ pipeline {
                 sh 'pnpm run build'
             }
         }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    withSonarQubeEnv('sonarqube') {
+                        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                            sh 'pnpm run sonar'
+                        }
+                    }
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitForQualityGate abortPipeline: true
+                    }
+                }
+            }
+        }
         
         stage('Deploy to Production') {
             steps {
