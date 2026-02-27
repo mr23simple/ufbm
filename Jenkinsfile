@@ -6,6 +6,7 @@ pipeline {
     
     tools {
         nodejs 'nodejs'
+        jdk 'jdk17'
     }
     
     environment {
@@ -35,9 +36,18 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
+                    def scannerHome = tool 'sonar-scanner-4.0'
                     withSonarQubeEnv('sonarqube') {
                         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                            sh 'pnpm run sonar'
+                            sh "${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=usmm \
+                                -Dsonar.projectName=USMM \
+                                -Dsonar.sources=src \
+                                -Dsonar.tests=tests \
+                                -Dsonar.test.inclusions=tests/**/*.ts \
+                                -Dsonar.exclusions=node_modules/**,dist/** \
+                                -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                                -Dsonar.token=${SONAR_TOKEN}"
                         }
                     }
                     timeout(time: 5, unit: 'MINUTES') {
